@@ -145,9 +145,12 @@ cp configs/config.example.yaml configs/config.yaml
 ```bash
 export EWS_PASSWORD="your_ews_password"
 export LLM_TOKEN="your_llm_token"
+export EWS_USER_UPN="user@corp.com"
+export EWS_ENDPOINT="https://ews.corp.com/EWS/Exchange.asmx"
+export LLM_ENDPOINT="https://llm-gw.corp.com/api/v1/chat"
 ```
 
-Or create `.env` file (see `.env.example`).
+Or create `.env` file with these variables.
 
 3. Update `configs/config.yaml` with your settings:
    - EWS endpoint and credentials

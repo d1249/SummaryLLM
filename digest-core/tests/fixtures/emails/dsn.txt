@@ -1,0 +1,13 @@
+From: postmaster@company.com
+To: user@company.com
+Subject: Undeliverable: Your message
+Date: Mon, 15 Jan 2024 11:20:00 +0000
+
+Delivery Status Notification
+
+Your message could not be delivered to the following recipient:
+recipient@invalid.com
+
+The recipient's mailbox is full.
+
+System Administrator

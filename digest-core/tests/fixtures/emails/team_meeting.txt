@@ -1,0 +1,18 @@
+From: coordinator@company.com
+To: user@company.com, colleague@company.com
+CC: manager@company.com
+Subject: Team Meeting - Please Confirm Attendance
+Date: Mon, 15 Jan 2024 13:45:00 +0000
+
+Hi Team,
+
+We have a team meeting scheduled for Wednesday at 10 AM.
+Please confirm your attendance by replying to this email.
+
+Meeting details:
+- Date: Wednesday, January 17th
+- Time: 10:00 AM
+- Location: Conference Room A
+
+Best regards,
+Coordinator

@@ -102,7 +102,7 @@ class LLMGateway:
             
             # Add authorization header
             headers = self.config.headers.copy()
-            headers["Authorization"] = f"Bearer {self.config.get_llm_token()}"
+            headers["Authorization"] = f"Bearer {self.config.get_token()}"
             
             # Make request
             response = self.client.post(

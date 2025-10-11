@@ -1,0 +1,11 @@
+From: noreply@company.com
+To: user@company.com
+Subject: [Автоответ] Out of Office
+Date: Mon, 15 Jan 2024 09:00:00 +0000
+Auto-Submitted: auto-replied
+
+I am currently out of office and will return on Monday, January 22nd.
+For urgent matters, please contact my assistant at assistant@company.com.
+
+Best regards,
+User

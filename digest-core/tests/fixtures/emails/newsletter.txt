@@ -1,0 +1,15 @@
+From: newsletter@company.com
+To: user@company.com
+Subject: Weekly Newsletter - January 15, 2024
+Date: Mon, 15 Jan 2024 08:00:00 +0000
+
+Weekly Newsletter
+
+This week's highlights:
+- Company picnic scheduled for Friday
+- New employee onboarding program
+- IT maintenance window this weekend
+
+FYI - No action required.
+
+Newsletter Team

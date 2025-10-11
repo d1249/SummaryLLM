@@ -1,0 +1,12 @@
+From: manager@company.com
+To: user@company.com
+Subject: URGENT: Review Q4 Report
+Date: Mon, 15 Jan 2024 10:30:00 +0000
+
+Hi,
+
+Please review the Q4 report and provide feedback by Friday.
+This is urgent and requires your immediate attention.
+
+Best regards,
+Manager

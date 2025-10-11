@@ -49,7 +49,7 @@ def run_digest(from_date: str, sources: List[str], out: str, model: str) -> None
     metrics = MetricsCollector(config.observability.prometheus_port)
     
     # Start health check server
-    start_health_server(port=9109)
+    start_health_server(port=9109, llm_config=config.llm)
     
     # Parse date
     if from_date == "today":
@@ -237,7 +237,7 @@ def run_digest_dry_run(from_date: str, sources: List[str], out: str, model: str)
     metrics = MetricsCollector(config.observability.prometheus_port)
     
     # Start health check server
-    start_health_server(port=9109)
+    start_health_server(port=9109, llm_config=config.llm)
     
     # Parse date
     if from_date == "today":

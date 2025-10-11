@@ -1,0 +1,52 @@
+[
+  {
+    "msg_id": "msg-001",
+    "conversation_id": "conv-001",
+    "datetime_received": "2025-10-11T14:37:42.403095+00:00",
+    "sender": {
+      "email_address": "manager@company.com"
+    },
+    "subject": "URGENT: Server Maintenance Required",
+    "text_body": "\n        Hi Team,\n        \n        Our production server is experiencing issues and needs immediate attention.\n        Please review the logs and schedule maintenance for tonight.\n        \n        Best regards,\n        Manager\n        "
+  },
+  {
+    "msg_id": "msg-002",
+    "conversation_id": "conv-002",
+    "datetime_received": "2025-10-11T12:37:42.403319+00:00",
+    "sender": {
+      "email_address": "colleague@company.com"
+    },
+    "subject": "Meeting: Q4 Review",
+    "text_body": "\n        Hello,\n        \n        Let's schedule a meeting to review Q4 performance.\n        Please confirm your availability for next week.\n        \n        Thanks,\n        Colleague\n        "
+  },
+  {
+    "msg_id": "msg-003",
+    "conversation_id": "conv-003",
+    "datetime_received": "2025-10-11T10:37:42.403322+00:00",
+    "sender": {
+      "email_address": "user@company.com"
+    },
+    "subject": "Out of Office",
+    "text_body": "\n        I will be out of office until next Monday.\n        For urgent matters, please contact my assistant.\n        \n        Best regards,\n        User\n        "
+  },
+  {
+    "msg_id": "msg-004",
+    "conversation_id": "conv-004",
+    "datetime_received": "2025-10-11T08:37:42.403324+00:00",
+    "sender": {
+      "email_address": "team@company.com"
+    },
+    "subject": "Project Discussion",
+    "text_body": "\n        This is a long email with multiple paragraphs.\n        \n        Paragraph 1: We need to discuss the project timeline.\n        \n        Paragraph 2: The budget has been approved.\n        \n        Paragraph 3: Please review the attached documents.\n        \n        Paragraph 4: Let me know if you have any questions.\n        \n        Paragraph 5: We should schedule a follow-up meeting.\n        \n        Best regards,\n        Team\n        "
+  },
+  {
+    "msg_id": "msg-005",
+    "conversation_id": "conv-005",
+    "datetime_received": "2025-10-11T06:37:42.403326+00:00",
+    "sender": {
+      "email_address": "system@company.com"
+    },
+    "subject": "Delivery Status Notification",
+    "text_body": "\n        Delivery Status Notification\n        \n        Your message could not be delivered.\n        Please check the recipient address.\n        \n        System Administrator\n        "
+  }
+]

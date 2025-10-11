@@ -1,0 +1,14 @@
+From: boss@company.com
+To: user@company.com
+Subject: Deadline: Annual Review Due Tomorrow
+Date: Mon, 15 Jan 2024 18:00:00 +0000
+
+Hi,
+
+Your annual review is due tomorrow (Tuesday, January 16th) by 5 PM.
+Please submit your self-assessment and goals for next year.
+
+This is a hard deadline - no extensions.
+
+Thanks,
+Boss

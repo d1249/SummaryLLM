@@ -1,0 +1,12 @@
+ews:
+  endpoint: https://mail.company.com/EWS/Exchange.asmx
+  sync_state_path: /tmp/test.state
+  user_upn: test@company.com
+llm:
+  endpoint: https://api.openai.com/v1/chat/completions
+  max_retries: 3
+  model: gpt-4o-mini
+  timeout: 30
+time:
+  timezone: UTC
+  window_type: calendar_day

@@ -1,0 +1,18 @@
+From: team@company.com
+To: user@company.com
+Subject: Re: Project Discussion
+Date: Mon, 15 Jan 2024 17:30:00 +0000
+
+On Mon, 15 Jan 2024 at 16:00, user@company.com wrote:
+> Thanks for the update. I'll review the documents.
+
+Great! Please also check the budget allocation.
+
+> On Mon, 15 Jan 2024 at 15:30, team@company.com wrote:
+> > We need to discuss the project timeline.
+> > Please review the attached documents.
+
+The timeline looks good. Let's schedule a follow-up meeting.
+
+Best regards,
+Team

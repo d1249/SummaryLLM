@@ -22,11 +22,115 @@ Daily corporate communications digest with privacy-first design and LLM-powered 
 # Clone repository
 cd digest-core
 
-# Install dependencies
-pip install -e .
+# Install dependencies with uv
+uv sync
 
 # Or using make
 make setup
+```
+
+## Infrastructure
+
+### Dedicated Machine Setup
+
+For deployment on a dedicated machine with EWS access:
+
+1. **Prerequisites**:
+   - Docker/Podman installed
+   - Access to EWS endpoint
+   - Corporate CA certificate at `/etc/ssl/corp-ca.pem`
+   - Directories `/opt/digest/out` and `/opt/digest/.state` (UID 1001)
+
+2. **Build and Run**:
+   ```bash
+   # Build Docker image
+   make docker
+   
+   # Run container with proper mounts
+   docker run -d \
+     --name digest-core \
+     -e EWS_PASSWORD='your_password' \
+     -e LLM_TOKEN='your_token' \
+     -v /etc/ssl/corp-ca.pem:/etc/ssl/corp-ca.pem:ro \
+     -v /opt/digest/out:/data/out \
+     -v /opt/digest/.state:/data/.state \
+     -p 9108:9108 \
+     -p 9109:9109 \
+     digest-core:latest
+   ```
+
+3. **Manual Run**:
+   ```bash
+   docker run -it \
+     -e EWS_PASSWORD='your_password' \
+     -e LLM_TOKEN='your_token' \
+     -v /etc/ssl/corp-ca.pem:/etc/ssl/corp-ca.pem:ro \
+     -v /opt/digest/out:/data/out \
+     -v /opt/digest/.state:/data/.state \
+     -p 9108:9108 \
+     -p 9109:9109 \
+     digest-core:latest python -m digest_core.cli run
+   ```
+
+### Scheduling
+
+#### systemd Timer
+Create `/etc/systemd/system/digest-core.service`:
+```ini
+[Unit]
+Description=Digest Core Service
+After=network.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/docker run --rm \
+  -e EWS_PASSWORD=%i \
+  -e LLM_TOKEN=%i \
+  -v /etc/ssl/corp-ca.pem:/etc/ssl/corp-ca.pem:ro \
+  -v /opt/digest/out:/data/out \
+  -v /opt/digest/.state:/data/.state \
+  digest-core:latest
+User=digest
+Group=digest
+EnvironmentFile=/etc/digest-core.env
+```
+
+Create `/etc/systemd/system/digest-core.timer`:
+```ini
+[Unit]
+Description=Run digest-core daily
+Requires=digest-core.service
+
+[Timer]
+OnCalendar=daily
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+```
+
+Enable and start:
+```bash
+sudo systemctl enable digest-core.timer
+sudo systemctl start digest-core.timer
+```
+
+#### Cron
+Add to crontab:
+```bash
+# Run daily at 07:30
+30 7 * * * /usr/bin/docker run --rm -e EWS_PASSWORD='password' -e LLM_TOKEN='token' -v /etc/ssl/corp-ca.pem:/etc/ssl/corp-ca.pem:ro -v /opt/digest/out:/data/out -v /opt/digest/.state:/data/.state digest-core:latest
+```
+
+### Rotation
+
+Run weekly cleanup:
+```bash
+# Rotate state and artifacts
+./scripts/rotate_state.sh
+
+# Or using make
+make rotate
 ```
 
 ## Configuration
@@ -112,6 +216,8 @@ Prometheus metrics available at `http://localhost:9108/metrics`:
 - `digest_build_seconds`: Total digest build time
 - `runs_total{status}`: Run status (ok/retry/failed)
 
+**Cardinality Limits**: Metrics use controlled label sets to prevent high cardinality. Only essential labels are included (model, operation, status).
+
 ### Health Checks
 
 - Health: `http://localhost:9109/healthz`
@@ -130,6 +236,24 @@ Structured JSON logs via `structlog` with automatic PII redaction:
   "digest_date": "2024-01-15"
 }
 ```
+
+**PII Policy**: All PII masking logic (emails, phone numbers, names, SSNs, credit cards, IP addresses) is handled by the LLM Gateway API. No local masking is performed. Message bodies are never logged.
+
+### Diagnostics
+
+Check environment and connectivity:
+```bash
+# Run diagnostics
+./scripts/print_env.sh
+
+# Or using make
+make env-check
+```
+
+For empty days, check:
+- Time window settings (calendar_day vs rolling_24h)
+- Watermark state in `.state` directory
+- EWS connectivity and credentials
 
 ## Development
 
@@ -169,9 +293,11 @@ Runs are idempotent per `(user_id, digest_date)` with a T-48h rebuild window:
 - If artifacts exist and are <48h old: skip rebuild
 - If artifacts are >48h old or missing: rebuild
 
+To force rebuild, delete existing artifacts or use `--force` flag.
+
 ## Privacy & Security
 
-- **PII Masking**: Emails, phones, names, IDs masked before LLM
+- **PII Masking**: All PII masking (emails, phone numbers, names, SSNs, credit cards, IP addresses) handled by LLM Gateway API
 - **No Payload Logging**: Message bodies never logged
 - **Corporate CA**: TLS verification with custom CA
 - **Non-root Container**: Docker runs as UID 1001

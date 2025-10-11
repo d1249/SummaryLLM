@@ -1,5 +1,7 @@
 """
 HTML to text normalization and PII masking.
+Note: All PII masking is handled by LLM Gateway API.
+This module only provides basic HTML to text conversion.
 """
 import re
 import html
@@ -11,23 +13,12 @@ logger = structlog.get_logger()
 
 
 class HTMLNormalizer:
-    """HTML to text conversion and PII masking."""
+    """HTML to text conversion. PII masking handled by LLM Gateway API."""
     
     def __init__(self):
-        # PII patterns for masking
-        self.pii_patterns = {
-            'email': re.compile(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'),
-            'phone': re.compile(r'(\+?[1-9]\d{1,14})|(\(\d{3}\)\s?\d{3}-\d{4})|(\d{3}-\d{3}-\d{4})'),
-            'ssn': re.compile(r'\b\d{3}-\d{2}-\d{4}\b'),
-            'credit_card': re.compile(r'\b\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b'),
-            'ip_address': re.compile(r'\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b'),
-        }
-        
-        # Common name patterns (simplified)
-        self.name_patterns = [
-            re.compile(r'\b[A-Z][a-z]+ [A-Z][a-z]+\b'),  # First Last
-            re.compile(r'\b[A-Z][a-z]+ [A-Z]\. [A-Z][a-z]+\b'),  # First M. Last
-        ]
+        # Note: PII masking is now handled by LLM Gateway API
+        # This class only provides HTML to text conversion
+        pass
     
     def html_to_text(self, html_content: str) -> str:
         """Convert HTML to clean text."""
@@ -73,54 +64,10 @@ class HTMLNormalizer:
             return text
     
     def mask_pii(self, text: str) -> str:
-        """Mask PII in text with [[REDACT:TYPE]] markers."""
-        if not text:
-            return text
-        
-        masked_text = text
-        
-        # Mask emails
-        masked_text = self.pii_patterns['email'].sub('[[REDACT:EMAIL]]', masked_text)
-        
-        # Mask phone numbers
-        masked_text = self.pii_patterns['phone'].sub('[[REDACT:PHONE]]', masked_text)
-        
-        # Mask SSNs
-        masked_text = self.pii_patterns['ssn'].sub('[[REDACT:SSN]]', masked_text)
-        
-        # Mask credit cards
-        masked_text = self.pii_patterns['credit_card'].sub('[[REDACT:CARD]]', masked_text)
-        
-        # Mask IP addresses
-        masked_text = self.pii_patterns['ip_address'].sub('[[REDACT:IP]]', masked_text)
-        
-        # Mask names (simplified approach)
-        for pattern in self.name_patterns:
-            masked_text = pattern.sub('[[REDACT:NAME]]', masked_text)
-        
-        # Denylist check: verify no raw PII patterns remain
-        self._validate_no_leakage(masked_text)
-        
-        return masked_text
-    
-    def _validate_no_leakage(self, text: str) -> None:
-        """Validate that no raw PII patterns remain after masking."""
-        # Check for email leakage
-        if self.pii_patterns['email'].search(text):
-            leaked = self.pii_patterns['email'].findall(text)
-            logger.warning("Email leakage detected after masking", leaked_count=len(leaked))
-        
-        # Check for phone leakage
-        if self.pii_patterns['phone'].search(text):
-            logger.warning("Phone leakage detected after masking")
-        
-        # Check for SSN leakage
-        if self.pii_patterns['ssn'].search(text):
-            logger.warning("SSN leakage detected after masking")
-        
-        # Check for credit card leakage
-        if self.pii_patterns['credit_card'].search(text):
-            logger.warning("Credit card leakage detected after masking")
+        """PII masking is handled by LLM Gateway API. This method returns text as-is."""
+        # All PII masking is now handled by LLM Gateway API
+        # This method is kept for compatibility but does no masking
+        return text
     
     def truncate_text(self, text: str, max_bytes: int = 200000) -> str:
         """Truncate text if it exceeds size limit."""

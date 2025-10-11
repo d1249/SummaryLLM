@@ -1,14 +1,13 @@
-.PHONY: setup test lint run docker clean
+.PHONY: setup test lint run docker clean package ci scripts
 
 setup:
-	pip install -e .[dev]
+	uv sync
 
 test:
-	pytest -v --cov=digest_core tests/
+	./scripts/test.sh
 
 lint:
-	ruff check src/ tests/
-	black --check src/ tests/
+	./scripts/lint.sh
 
 format:
 	ruff check --fix src/ tests/
@@ -29,6 +28,27 @@ docker-run:
 		-p 9108:9108 \
 		-p 9109:9109 \
 		digest-core:latest
+
+package:
+	./scripts/build.sh
+
+ci: lint test
+
+scripts:
+	@echo "Available scripts:"
+	@ls -la scripts/
+
+smoke:
+	./scripts/smoke.sh
+
+deploy:
+	./scripts/deploy.sh
+
+rotate:
+	./scripts/rotate_state.sh
+
+env-check:
+	./scripts/print_env.sh
 
 clean:
 	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true

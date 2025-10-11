@@ -1,0 +1,30 @@
+# Project overview
+Build a daily corporate communications digest (email/EWS MVP). Privacy-first: upstream masking via LLM Gateway. Idempotent runs, JSON/MD artifacts, Prometheus metrics.
+
+# Golden constraints
+- Never log payloads or secrets. Structured logs only.
+- Strict JSON outputs validated by Pydantic (llm/schemas.py).
+- Every summary item MUST cite evidence_id and source ref.
+- Use config via pydantic-settings. Secrets via ENV only.
+- Prefer small, testable modules. Add unit tests for contracts.
+
+# Coding style
+- Python 3.11, ruff+black+isort, mypy (on models).
+- Typer for CLI, httpx for HTTP, structlog for JSON logs.
+
+# File ownership
+- CLI flow in src/digest_core/cli.py
+- EWS access in src/digest_core/ingest/ews.py (NTLM/EWS)
+- LLM gateway client in src/digest_core/llm/gateway.py
+- Prompts in prompts/*.j2 (immutable at runtime; versioned)
+- Output writers in assemble/{jsonout,markdown}.py
+
+# Non-negotiables
+- Idempotency: per-source high-water mark; T-48h rebuild window.
+- Self-check for PII leakage (post-mask regex denylist).
+- Prometheus exporter on port 9108.
+
+# References available in repo
+- docs/BRD.md (business requirements)
+- docs/TECH.md (MVP→LVL3 plan, prompts/metrics)
+- docs/ARCH.md (C4 L1/L2 + sequences)

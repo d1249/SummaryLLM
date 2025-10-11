@@ -29,11 +29,13 @@
     
     - Авторизация NTLM/UPN → `https://<host>/EWS/Exchange.asmx` (verify CA, no autodiscover).
         
-    - Фильтр: `ReceivedTime >= now-24h`, пагинация `page_size`, выбор `Inbox`.
+    - **Окно выборки**: определяется как [0:00; 23:59:59] в user_timezone при режиме calendar_day; в rolling_24h — now()-24h (UTC).
+        
+    - Фильтр: `ReceivedTime >= window_start`, пагинация `page_size`, выбор `Inbox`.
         
     - Возвращает нормализованные записи (см. TECH 3).
         
-    - Обновляет `.state/ews.syncstate` для инкрементальной выборки.
+    - **SyncState**: при ошибке выполняется безопасная реинициализация: полный прогон за `lookback_hours*3`, с дедупликацией по `msg_id` и `changekey`, после успешной сверки обновляется `SyncState`.
         
 3. Normalize:
     
@@ -45,11 +47,13 @@
     
     - Группируем по `conversation_id`; отбираем последние релевантные части.
         
-    - Сплит на эвиденсы (256–512 токенов); назначаем `evidence_id`.
+    - **Evidence/Split**: разрез по абзацам; если абзац >512 токенов — по предложениям; максимум 12 evidence на письмо; общий бюджет токенов на вызов LLM ≤ 3 000; при превышении — top-k по селектору важности.
         
 5. Select/Context:
     
     - Простые правила: contains «пожалуйста/срок/до …», «нужно/требуется/approve», упоминания ролей, адресованные получателю.
+        
+    - **Фильтрация служебных писем**: Out-of-Office, Delivery Status Notification, spam-notices; признак — заголовки `Auto-Submitted`, темы `[Автоответ]`, `Undeliverable`, отправитель `postmaster@` и т. п.
         
 6. LLM/Gateway:
     
@@ -59,7 +63,7 @@
         
 7. Assemble:
     
-    - Пишем `digest-YYYY-MM-DD.json` и `.md`.
+    - Пишем `digest-YYYY-MM-DD.json` и `.md` (≤400 слов).
         
 8. Observability:
     
@@ -73,6 +77,12 @@
 - Производительность: страйдинг по письмам, ограничение токенов эвиденса.
     
 - Безопасность: верификация корпоративного CA, секреты из ENV, отсутствие payload-логов.
+
+## 4) Расширяемость и безопасность
+
+- **Расширение источников**: интерфейс `SourceIngest` (plug-in) и унифицированный `source_ref` (`type`, `id`, `thread_id`). В `select/context` не шить логики, зависящей от email-полей.
+    
+- **Docker hardening**: контейнер запускается от non-root UID/GID; монтируется `verify_ca` read-only; переменные из `.env` не логируются; секреты через менеджер секретов (Vault/K8s Secrets); образ — distroless/slim.
     
 
 ---

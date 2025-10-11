@@ -10,6 +10,10 @@
 ## 2) Конфигурация (пример ключей)
 
 ```yaml
+time:
+  user_timezone: "Europe/Moscow"   # или America/New_York
+  window: "calendar_day"           # options: rolling_24h | calendar_day
+
 ews:
   endpoint: "https://<ews-host>/EWS/Exchange.asmx"
   user_upn: "user@corp"
@@ -27,6 +31,9 @@ llm:
   timeout_s: 45
   headers:
     Authorization: "Bearer ${LLM_TOKEN}"
+  max_tokens_per_run: 30000
+  cost_limit_per_run: 5.0  # USD
+
 observability:
   prometheus_port: 9108
   log_level: "INFO"
@@ -36,15 +43,25 @@ observability:
 
 - Поля: `msg_id`, `conversation_id`, `datetime_received` (UTC ISO), `sender.email`, `subject`, `text_body`.
     
-- HTML→текст: удаляем `<style>`, трекинги/подписи, корректно режем цитаты (`>`, `-----Original Message-----`, `От:`/`From:`).
+- **Дедупликация**: `msg_id := InternetMessageId || EWSId (fallback)`, удалять угловые скобки, приводить к lower-case; `conversation_id` нормализовать к UTF-8 и фиксированной длине.
     
-- Маскирование: email/телефоны/ФИО/ID — заменяем на `[[REDACT:TYPE]]` **до** отправки в LLM.
+- **HTML→текст**: удаляем `<style>`, трекинги/подписи, корректно режем цитаты (`>`, `-----Original Message-----`, `От:`/`From:`).
+    
+- **Цитаты**: отсекать по маркерам `-----Original Message-----`, `From:`, `Переадресовано:`, `> ` (фьюз 5 уровней). Подписи: регулярки по `Best regards|С уважением`, `Sent from my iPhone`, блоки `DISCLAIMER`.
+    
+- **Маскирование**: email/телефоны/ФИО/ID — заменяем на `[[REDACT:TYPE]]` **до** отправки в LLM.
+    
+- **Сущности для маскирования**: email, телефоны (E.164/набор локальных форматов), ФИО (ru/en), табельный/клиентский ID, адреса, номера договоров. В `tests/test_masking.py` — позитив/негативные кейсы, проверка отсутствия оригиналов в логах/артефактах.
+    
+- **Прикрепления**: Inline-attachments (`contentId` в `<img src="cid:...">`) игнорировать; binary attachments не загружать; общий лимит тела письма после очистки — 200 КБ (truncate с меткой `[TRUNCATED]`).
     
 
 ## 4) Схема JSON (контракт LLM)
 
 ```json
 {
+  "schema_version": "1.0",
+  "prompt_version": "extract_actions.v1",
   "digest_date": "YYYY-MM-DD",
   "trace_id": "string",
   "sections": [
@@ -57,7 +74,7 @@ observability:
           "due": "YYYY-MM-DD|null",
           "evidence_id": "string",
           "confidence": 0.0,
-          "source_ref": {"type":"email","msg_id":"string"}
+          "source_ref": {"type":"email","msg_id":"string","conversation_id":"string"}
         }
       ]
     }
@@ -68,16 +85,24 @@ observability:
 - Валидация pydantic на каждом запуске. Любая нестыковка → ретрай LLM с жёсткой инструкцией.
     
 
-## 5) LLM Gateway — контракт запроса
+## 5) EWS ошибки и ретраи
+
+- **Retry**: 429/503 — jittered exponential backoff (base=0.5s, factor=2, max=60s), max_attempts=8; 5xx — max_attempts=5; 401/403 — без ретраев, немедленный фейл с меткой `auth_error`.
+
+## 6) LLM Gateway — контракт запроса
 
 - `POST {endpoint}` с `{model, messages:[{role:"system"/"user", content:"..."}]}`.
     
 - Таймаут: 45s; ретрай 1–2 раза по `read/connect timeout`, 1 раз по «invalid JSON».
     
+- **Ретраи по качеству**: если `items==0` и есть ≥1 evidence с позитивными сигналами — один ретрай с уточняющим system-сигналом. Если после ретрая невалидно — возвращать пустую секцию и логировать `llm_contract_violation=1`.
+    
+- **Лимиты**: совокупные токены на запуск ≤ 30 000; при превышении — агрессивная фильтрация низкоприоритетных тредов; метрика `llm_cost_estimate` (если доступна в Gateway).
+    
 - Логируем: `trace_id`, `status`, `latency_ms`, `tokens_in/out` (если возвращаются заголовками).
     
 
-## 6) Промпты (версии и правила)
+## 7) Промпты (версии и правила)
 
 - Файлы `prompts/*.j2` (иммутабельны в рантайме; версионируем).
     
@@ -85,6 +110,7 @@ observability:
     
 - **summarize.v1.j2** — собирает краткий Markdown ≤400 слов, каждый пункт с ссылкой на `evidence_id`.
     
+- **Многоязычие**: если evidence на EN — оставлять исходный текст, заголовки секций — ru; не выполнять машинный перевод в MVP.
 
 ### Системные инварианты (вставляются в оба промпта)
 
@@ -97,7 +123,17 @@ observability:
 - Russian locale по умолчанию; даты в ISO.
     
 
-## 7) Идемпотентность и high-water mark
+## 8) Селектор контекста (эвристики)
+
+- **Положительные сигналы**: imperative глаголы, дедлайны (`до|by|ДД.ММ|YYYY-MM-DD`), обращения к адресату (вы/you + имя).
+    
+- **Отрицательные сигналы**: `FYI`, `newsletter`, `digest`.
+    
+- **Ранжирование**: приоритет письм To-адресату > CC.
+    
+- **Фильтрация служебных писем**: Out-of-Office, Delivery Status Notification, spam-notices; признак — заголовки `Auto-Submitted`, темы `[Автоответ]`, `Undeliverable`, отправитель `postmaster@` и т. п.
+
+## 9) Идемпотентность и high-water mark
 
 - `(user_id, digest_date)` — ключ.
     
@@ -106,9 +142,9 @@ observability:
 - EWS `SyncState`/watermark и локальный `.state/ews.syncstate` для инкрементальной выборки.
     
 
-## 8) Наблюдаемость (Prometheus + логи)
+## 10) Наблюдаемость (Prometheus + логи)
 
-- Метрики:
+- **Метрики**:
     
     - `llm_latency_ms` (histogram), `llm_tokens_in_total`, `llm_tokens_out_total`,
         
@@ -118,12 +154,24 @@ observability:
         
     - `runs_total{status="ok|retry|failed"}`.
         
-- Логи: structlog JSON (`run_id`, `trace_id`, стадия пайплайна, счётчики); **без** тел писем/секретов.
+- **Кардинальность**: лимитируем лейблы до: `status`, `source`, `stage`. Без `msg_id` в метриках. Экспонируем `/healthz` (liveness) и `/readyz` (readiness).
+        
+- **Логи**: structlog JSON (`run_id`, `trace_id`, стадия пайплайна, счётчики); **без** тел писем/секретов.
+    
+- **Redaction**: все строки проходят redaction-фильтр (email/телефон/ID→`[[REDACT:...]]`). Уровни: `INFO` — этапы пайплайна; `WARN` — деградации качества/обрезки; `ERROR` — фатальные; ни при каком уровне не логировать тело писем.
     
 
-## 9) Тесты/снапшоты
+## 11) CLI и конфигурация
+
+- **Флаги**: `--from_date`, `--sources`, `--out`, `--model`, `--window`, `--dry-run` (без вызова LLM, только ingest+normalize+stats).
+    
+- **Коды возврата**: 0 — OK, 2 — частичный успех, 1 — ошибка.
+
+## 12) Тесты/снапшоты
 
 - `tests/test_llm_contract.py` валидирует образец `examples/digest-YYYY-MM-DD.json`.
+    
+- **Фикстуры**: `tests/fixtures/` с 30+ писем (html/txt), в т. ч. автоответы, NDR, длинные треды, кириллица/latin-1, вложенные цитаты. Покрытие unit-тестами ≥70% модулей normalize/select/masking.
     
 - Снапшоты Markdown/JSON — фиксируем регрессию; для не-детерминизма — стабилизируем селекцию (правила + сортировки).
     

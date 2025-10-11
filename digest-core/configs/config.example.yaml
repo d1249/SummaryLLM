@@ -1,0 +1,27 @@
+time:
+  user_timezone: "Europe/Moscow"
+  window: "calendar_day"
+
+ews:
+  endpoint: "https://ews.corp.com/EWS/Exchange.asmx"
+  user_upn: "user@corp.com"
+  password_env: "EWS_PASSWORD"
+  verify_ca: "/etc/ssl/corp-ca.pem"
+  autodiscover: false
+  folders: ["Inbox"]
+  lookback_hours: 24
+  page_size: 100
+  sync_state_path: ".state/ews.syncstate"
+
+llm:
+  endpoint: "https://llm-gw.corp.com/api/v1/chat"
+  model: "corp/gpt-4o-mini"
+  timeout_s: 45
+  headers:
+    Authorization: "Bearer ${LLM_TOKEN}"
+  max_tokens_per_run: 30000
+  cost_limit_per_run: 5.0
+
+observability:
+  prometheus_port: 9108
+  log_level: "INFO"

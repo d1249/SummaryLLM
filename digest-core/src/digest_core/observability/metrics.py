@@ -1,0 +1,218 @@
+"""
+Prometheus metrics collection and export.
+"""
+import time
+from typing import Dict, Any, Optional
+from prometheus_client import Counter, Histogram, Summary, Gauge, start_http_server
+import structlog
+
+logger = structlog.get_logger()
+
+
+class MetricsCollector:
+    """Collect and export Prometheus metrics."""
+    
+    def __init__(self, port: int = 9108):
+        self.port = port
+        self.start_time = time.time()
+        
+        # Initialize metrics
+        self._init_metrics()
+        
+        # Start HTTP server for metrics export
+        try:
+            start_http_server(port)
+            logger.info("Prometheus metrics server started", port=port)
+        except Exception as e:
+            logger.warning("Failed to start metrics server", port=port, error=str(e))
+    
+    def _init_metrics(self):
+        """Initialize Prometheus metrics."""
+        
+        # Email metrics
+        self.emails_total = Counter(
+            'emails_total',
+            'Total number of emails processed',
+            ['status']  # fetched, filtered, normalized
+        )
+        
+        # LLM metrics
+        self.llm_latency_ms = Histogram(
+            'llm_latency_ms',
+            'LLM request latency in milliseconds',
+            buckets=[10, 50, 100, 200, 500, 1000, 2000, 5000]
+        )
+        
+        self.llm_tokens_in_total = Counter(
+            'llm_tokens_in_total',
+            'Total input tokens sent to LLM'
+        )
+        
+        self.llm_tokens_out_total = Counter(
+            'llm_tokens_out_total',
+            'Total output tokens from LLM'
+        )
+        
+        self.llm_contract_violations = Counter(
+            'llm_contract_violations_total',
+            'Total LLM contract violations'
+        )
+        
+        # Pipeline metrics
+        self.digest_build_seconds = Summary(
+            'digest_build_seconds',
+            'Time spent building digest'
+        )
+        
+        self.runs_total = Counter(
+            'runs_total',
+            'Total digest runs',
+            ['status']  # ok, retry, failed
+        )
+        
+        # Evidence metrics
+        self.evidence_chunks_total = Counter(
+            'evidence_chunks_total',
+            'Total evidence chunks processed',
+            ['stage']  # created, selected, processed
+        )
+        
+        # Thread metrics
+        self.threads_total = Counter(
+            'threads_total',
+            'Total conversation threads processed',
+            ['status']  # created, filtered, prioritized
+        )
+        
+        # System metrics
+        self.system_uptime_seconds = Gauge(
+            'system_uptime_seconds',
+            'System uptime in seconds'
+        )
+        
+        self.memory_usage_bytes = Gauge(
+            'memory_usage_bytes',
+            'Memory usage in bytes'
+        )
+    
+    def record_emails_total(self, count: int, status: str):
+        """Record email processing metrics."""
+        self.emails_total.labels(status=status).inc(count)
+        logger.debug("Recorded email metrics", count=count, status=status)
+    
+    def record_llm_latency(self, latency_ms: float):
+        """Record LLM request latency."""
+        self.llm_latency_ms.observe(latency_ms)
+        logger.debug("Recorded LLM latency", latency_ms=latency_ms)
+    
+    def record_llm_tokens(self, tokens_in: int, tokens_out: int):
+        """Record LLM token usage."""
+        self.llm_tokens_in_total.inc(tokens_in)
+        self.llm_tokens_out_total.inc(tokens_out)
+        logger.debug("Recorded LLM tokens", tokens_in=tokens_in, tokens_out=tokens_out)
+    
+    def record_llm_contract_violation(self):
+        """Record LLM contract violation."""
+        self.llm_contract_violations.inc()
+        logger.warning("Recorded LLM contract violation")
+    
+    def record_digest_build_time(self):
+        """Record digest build time."""
+        build_time = time.time() - self.start_time
+        self.digest_build_seconds.observe(build_time)
+        logger.debug("Recorded digest build time", build_time=build_time)
+    
+    def record_run_total(self, status: str):
+        """Record run status."""
+        self.runs_total.labels(status=status).inc()
+        logger.debug("Recorded run status", status=status)
+    
+    def record_evidence_chunks(self, count: int, stage: str):
+        """Record evidence chunk metrics."""
+        self.evidence_chunks_total.labels(stage=stage).inc(count)
+        logger.debug("Recorded evidence chunks", count=count, stage=stage)
+    
+    def record_threads(self, count: int, status: str):
+        """Record thread metrics."""
+        self.threads_total.labels(status=status).inc(count)
+        logger.debug("Recorded threads", count=count, status=status)
+    
+    def update_system_metrics(self):
+        """Update system metrics."""
+        uptime = time.time() - self.start_time
+        self.system_uptime_seconds.set(uptime)
+        
+        # Memory usage (simplified)
+        try:
+            import psutil
+            memory_usage = psutil.Process().memory_info().rss
+            self.memory_usage_bytes.set(memory_usage)
+        except ImportError:
+            # psutil not available, skip memory metrics
+            pass
+        
+        logger.debug("Updated system metrics", uptime=uptime)
+    
+    def get_metrics_summary(self) -> Dict[str, Any]:
+        """Get a summary of current metrics."""
+        return {
+            'uptime_seconds': time.time() - self.start_time,
+            'port': self.port,
+            'metrics_available': [
+                'emails_total',
+                'llm_latency_ms',
+                'llm_tokens_in_total',
+                'llm_tokens_out_total',
+                'digest_build_seconds',
+                'runs_total',
+                'evidence_chunks_total',
+                'threads_total'
+            ]
+        }
+    
+    def health_check(self) -> Dict[str, Any]:
+        """Perform health check."""
+        try:
+            # Check if metrics server is running
+            import socket
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            result = sock.connect_ex(('localhost', self.port))
+            sock.close()
+            
+            is_healthy = result == 0
+            
+            return {
+                'status': 'healthy' if is_healthy else 'unhealthy',
+                'metrics_port': self.port,
+                'uptime_seconds': time.time() - self.start_time,
+                'timestamp': time.time()
+            }
+            
+        except Exception as e:
+            logger.error("Health check failed", error=str(e))
+            return {
+                'status': 'unhealthy',
+                'error': str(e),
+                'timestamp': time.time()
+            }
+    
+    def readiness_check(self) -> Dict[str, Any]:
+        """Perform readiness check."""
+        try:
+            # Check if all required components are ready
+            uptime = time.time() - self.start_time
+            is_ready = uptime > 5  # Require at least 5 seconds uptime
+            
+            return {
+                'status': 'ready' if is_ready else 'not_ready',
+                'uptime_seconds': uptime,
+                'timestamp': time.time()
+            }
+            
+        except Exception as e:
+            logger.error("Readiness check failed", error=str(e))
+            return {
+                'status': 'not_ready',
+                'error': str(e),
+                'timestamp': time.time()
+            }

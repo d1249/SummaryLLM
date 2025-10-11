@@ -11,6 +11,10 @@ dependencies = [
   "exchangelib>=5.3.6",
   "tenacity>=9.0",
   "prometheus-client>=0.20",
+  "beautifulsoup4>=4.12",
+  "pytz>=2023.3",
+  "pyyaml>=6.0",
 ]
+
 [tool.ruff]
 line-length = 100

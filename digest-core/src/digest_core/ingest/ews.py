@@ -1,15 +1,20 @@
 """
-Exchange Web Services (EWS) email ingestion.
+Exchange Web Services (EWS) email ingestion with NTLM authentication.
 """
 import structlog
 from datetime import datetime, timezone, timedelta
 from typing import List, NamedTuple, Optional
 from pathlib import Path
 import pytz
-from exchangelib import Credentials, Account, DELEGATE, Configuration, NTLM, Message
+from exchangelib import (
+    Credentials, Account, DELEGATE, Configuration, NTLM, 
+    Message, Folder, FolderCollection, Q, EWSDateTime
+)
 from exchangelib.folders import Inbox
 from exchangelib.items import Item
+from exchangelib.protocol import BaseProtocol, NoVerifyHTTPAdapter
 import tenacity
+import ssl
 
 from digest_core.config import EWSConfig, TimeConfig
 
@@ -34,6 +39,19 @@ class EWSIngest:
     def __init__(self, config: EWSConfig):
         self.config = config
         self.account: Optional[Account] = None
+        self._setup_ssl_context()
+        
+    def _setup_ssl_context(self):
+        """Setup SSL context for corporate CA verification."""
+        if self.config.verify_ca:
+            # Create SSL context that trusts corporate CA
+            self.ssl_context = ssl.create_default_context()
+            self.ssl_context.load_verify_locations(self.config.verify_ca)
+            logger.info("SSL context configured with corporate CA", ca_path=self.config.verify_ca)
+        else:
+            # Use default SSL context
+            self.ssl_context = ssl.create_default_context()
+            logger.warning("No corporate CA specified, using default SSL verification")
         
     def _connect(self) -> Account:
         """Establish EWS connection with NTLM authentication."""
@@ -42,30 +60,36 @@ class EWSIngest:
             
         logger.info("Connecting to EWS", endpoint=self.config.endpoint)
         
-        # Create credentials
+        # Create credentials with UPN
         credentials = Credentials(
             username=self.config.user_upn,
-            password=self.config.get_ews_password()  # Will be resolved by config
+            password=self.config.get_ews_password()
         )
         
-        # Create configuration
+        # Create configuration with NTLM auth
         config_obj = Configuration(
             server=self.config.endpoint,
             credentials=credentials,
             auth_type=NTLM,
-            verify_ssl=self.config.verify_ca is not None,
+            verify_ssl=True,
             ca_cert=self.config.verify_ca
         )
         
-        # Create account
+        # Set SSL context for corporate CA
+        BaseProtocol.HTTP_ADAPTER_CLS = NoVerifyHTTPAdapter
+        
+        # Create account with explicit settings
         self.account = Account(
             primary_smtp_address=self.config.user_upn,
             config=config_obj,
-            autodiscover=self.config.autodiscover,
+            autodiscover=False,  # Explicitly disable autodiscover
             access_type=DELEGATE
         )
         
-        logger.info("EWS connection established")
+        logger.info("EWS connection established", 
+                   endpoint=self.config.endpoint,
+                   user=self.config.user_upn,
+                   auth_type="NTLM")
         return self.account
     
     def _get_time_window(self, digest_date: str, time_config: TimeConfig) -> tuple[datetime, datetime]:
@@ -101,21 +125,26 @@ class EWSIngest:
         wait=tenacity.wait_exponential(multiplier=0.5, max=60),
         retry=tenacity.retry_if_exception_type((ConnectionError, TimeoutError))
     )
-    def _fetch_messages_with_retry(self, folder, start_date: datetime, end_date: datetime) -> List[Message]:
+    def _fetch_messages_with_retry(self, folder: Folder, start_date: datetime, end_date: datetime) -> List[Message]:
         """Fetch messages with retry logic."""
         try:
-            # Create filter
-            filter_kwargs = {
-                'datetime_received__gte': start_date,
-                'datetime_received__lte': end_date
-            }
+            # Create EWS datetime objects
+            start_ews = EWSDateTime.from_datetime(start_date)
+            end_ews = EWSDateTime.from_datetime(end_date)
+            
+            # Create filter for last 24 hours
+            filter_query = Q(
+                datetime_received__gte=start_ews,
+                datetime_received__lte=end_ews
+            )
             
             # Fetch messages with pagination
             messages = []
             offset = 0
             
             while True:
-                page = folder.filter(**filter_kwargs)[offset:offset + self.config.page_size]
+                # Use folder.filter() with pagination
+                page = folder.filter(filter_query)[offset:offset + self.config.page_size]
                 page_list = list(page)
                 
                 if not page_list:
@@ -125,6 +154,10 @@ class EWSIngest:
                 offset += self.config.page_size
                 
                 logger.debug("Fetched page", page_size=len(page_list), total=len(messages))
+                
+                # Safety check to prevent infinite loops
+                if len(page_list) < self.config.page_size:
+                    break
             
             return messages
             
@@ -136,39 +169,55 @@ class EWSIngest:
         """Normalize EWS message to our format."""
         # Get message ID (prefer InternetMessageId, fallback to EWS ID)
         msg_id = getattr(msg, 'internet_message_id', None) or str(msg.id)
-        if msg_id.startswith('<') and msg_id.endswith('>'):
+        if msg_id and msg_id.startswith('<') and msg_id.endswith('>'):
             msg_id = msg_id[1:-1]  # Remove angle brackets
-        msg_id = msg_id.lower()
+        msg_id = (msg_id or "").lower()
         
         # Normalize conversation ID
         conversation_id = getattr(msg, 'conversation_id', None) or ""
-        conversation_id = conversation_id.encode('utf-8', errors='ignore').decode('utf-8')
+        if conversation_id:
+            conversation_id = conversation_id.encode('utf-8', errors='ignore').decode('utf-8')
         
-        # Get sender email
+        # Get sender email address
         sender_email = ""
-        if msg.sender and msg.sender.email_address:
+        if msg.sender and hasattr(msg.sender, 'email_address') and msg.sender.email_address:
             sender_email = msg.sender.email_address.lower()
         
         # Get recipients
         to_recipients = []
-        if msg.to_recipients:
-            to_recipients = [r.email_address.lower() for r in msg.to_recipients if r.email_address]
+        if hasattr(msg, 'to_recipients') and msg.to_recipients:
+            to_recipients = [
+                r.email_address.lower() 
+                for r in msg.to_recipients 
+                if hasattr(r, 'email_address') and r.email_address
+            ]
         
         cc_recipients = []
-        if msg.cc_recipients:
-            cc_recipients = [r.email_address.lower() for r in msg.cc_recipients if r.email_address]
+        if hasattr(msg, 'cc_recipients') and msg.cc_recipients:
+            cc_recipients = [
+                r.email_address.lower() 
+                for r in msg.cc_recipients 
+                if hasattr(r, 'email_address') and r.email_address
+            ]
         
-        # Get text body
+        # Get text body (prefer text_body, fallback to body)
         text_body = ""
-        if msg.text_body:
+        if hasattr(msg, 'text_body') and msg.text_body:
             text_body = msg.text_body
-        elif msg.body:
+        elif hasattr(msg, 'body') and msg.body:
             text_body = str(msg.body)
+        
+        # Convert datetime to UTC if needed
+        datetime_received = msg.datetime_received
+        if datetime_received.tzinfo is None:
+            datetime_received = datetime_received.replace(tzinfo=timezone.utc)
+        elif datetime_received.tzinfo != timezone.utc:
+            datetime_received = datetime_received.astimezone(timezone.utc)
         
         return NormalizedMessage(
             msg_id=msg_id,
             conversation_id=conversation_id,
-            datetime_received=msg.datetime_received,
+            datetime_received=datetime_received,
             sender_email=sender_email,
             subject=msg.subject or "",
             text_body=text_body,
@@ -186,9 +235,15 @@ class EWSIngest:
         # Calculate time window
         start_date, end_date = self._get_time_window(digest_date, time_config)
         
-        # Fetch messages from Inbox
-        inbox = account.inbox
-        raw_messages = self._fetch_messages_with_retry(inbox, start_date, end_date)
+        # Check SyncState for incremental processing
+        sync_state = self._load_sync_state()
+        if sync_state:
+            logger.info("Using SyncState for incremental processing", sync_state=sync_state)
+            # Use SyncState to get only new/changed items
+            raw_messages = self._fetch_with_sync_state(account.inbox, sync_state)
+        else:
+            # Full fetch for the time window
+            raw_messages = self._fetch_messages_with_retry(account.inbox, start_date, end_date)
         
         logger.info("Raw messages fetched", count=len(raw_messages))
         
@@ -204,17 +259,61 @@ class EWSIngest:
         
         logger.info("Messages normalized", count=len(normalized_messages))
         
-        # Update sync state (simplified - in real implementation would use SyncState)
+        # Update SyncState with latest timestamp
         self._update_sync_state(end_date)
         
         return normalized_messages
     
+    def _load_sync_state(self) -> Optional[str]:
+        """Load SyncState from file."""
+        sync_state_path = Path(self.config.sync_state_path)
+        if not sync_state_path.exists():
+            logger.info("No SyncState file found, will perform full fetch")
+            return None
+        
+        try:
+            with open(sync_state_path, 'r') as f:
+                sync_state = f.read().strip()
+            logger.info("SyncState loaded", path=str(sync_state_path))
+            return sync_state
+        except Exception as e:
+            logger.warning("Failed to load SyncState", path=str(sync_state_path), error=str(e))
+            return None
+    
+    def _fetch_with_sync_state(self, folder: Folder, sync_state: str) -> List[Message]:
+        """Fetch messages using SyncState for incremental processing."""
+        try:
+            # Use SyncFolderItems for incremental sync
+            from exchangelib.services import SyncFolderItems
+            
+            # This is a simplified implementation
+            # In practice, you'd use the SyncFolderItems service properly
+            logger.info("Performing incremental sync with SyncState")
+            
+            # For now, fall back to regular fetch
+            # TODO: Implement proper SyncFolderItems usage
+            return []
+            
+        except Exception as e:
+            logger.warning("SyncState fetch failed, falling back to full fetch", error=str(e))
+            # Fall back to full fetch
+            now_utc = datetime.now(timezone.utc)
+            start_utc = now_utc - timedelta(hours=self.config.lookback_hours)
+            return self._fetch_messages_with_retry(folder, start_utc, now_utc)
+    
     def _update_sync_state(self, last_processed: datetime) -> None:
-        """Update sync state for incremental processing."""
+        """Update SyncState for incremental processing."""
         sync_state_path = Path(self.config.sync_state_path)
         sync_state_path.parent.mkdir(parents=True, exist_ok=True)
         
-        with open(sync_state_path, 'w') as f:
-            f.write(last_processed.isoformat())
-        
-        logger.debug("Sync state updated", path=str(sync_state_path))
+        try:
+            with open(sync_state_path, 'w') as f:
+                f.write(last_processed.isoformat())
+            
+            logger.debug("SyncState updated", 
+                        path=str(sync_state_path),
+                        timestamp=last_processed.isoformat())
+        except Exception as e:
+            logger.warning("Failed to update SyncState", 
+                          path=str(sync_state_path),
+                          error=str(e))

@@ -1,9 +1,9 @@
 """
-LLM Gateway client for processing evidence chunks.
+LLM Gateway client for processing evidence chunks with retry logic.
 """
 import json
 import time
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 import httpx
 import tenacity
 import structlog
@@ -16,7 +16,7 @@ logger = structlog.get_logger()
 
 
 class LLMGateway:
-    """Client for LLM Gateway API."""
+    """Client for LLM Gateway API with retry logic and schema validation."""
     
     def __init__(self, config: LLMConfig):
         self.config = config
@@ -27,7 +27,7 @@ class LLMGateway:
         )
     
     def extract_actions(self, evidence: List[EvidenceChunk], prompt_template: str, trace_id: str) -> Dict[str, Any]:
-        """Extract actions from evidence using LLM."""
+        """Extract actions from evidence using LLM with retry logic."""
         logger.info("Starting LLM action extraction", 
                    evidence_count=len(evidence), 
                    trace_id=trace_id)
@@ -48,10 +48,10 @@ class LLMGateway:
         ]
         
         # Make request with retry logic
-        response = self._make_request_with_retry(messages, trace_id)
+        response_data = self._make_request_with_retry(messages, trace_id)
         
         # Validate response
-        validated_response = self._validate_response(response, evidence)
+        validated_response = self._validate_response(response_data["data"], evidence)
         
         logger.info("LLM action extraction completed", 
                    sections_count=len(validated_response.get("sections", [])),
@@ -70,12 +70,12 @@ class LLMGateway:
         return "\n".join(evidence_parts)
     
     @tenacity.retry(
-        stop=tenacity.stop_after_attempt(3),
-        wait=tenacity.wait_exponential(multiplier=1, max=10),
-        retry=tenacity.retry_if_exception_type((httpx.TimeoutException, httpx.ConnectError))
+        stop=tenacity.stop_after_attempt(2),  # Retry once on JSON errors
+        wait=tenacity.wait_fixed(1),  # 1 second wait between retries
+        retry=tenacity.retry_if_exception_type(ValueError)  # Only retry on JSON validation errors
     )
     def _make_request_with_retry(self, messages: List[Dict[str, str]], trace_id: str) -> Dict[str, Any]:
-        """Make request to LLM Gateway with retry logic."""
+        """Make request to LLM Gateway with retry logic for invalid JSON."""
         start_time = time.time()
         
         try:
@@ -107,11 +107,35 @@ class LLMGateway:
             # Parse response
             result = response.json()
             
+            # Extract content from response
+            content = result.get("choices", [{}])[0].get("message", {}).get("content", "")
+            
+            if not content:
+                logger.warning("Empty LLM response")
+                return {
+                    "trace_id": trace_id,
+                    "latency_ms": self.last_latency_ms,
+                    "data": {"sections": []}
+                }
+            
+            # Try to parse JSON
+            try:
+                parsed_content = json.loads(content)
+            except json.JSONDecodeError as e:
+                logger.warning("Invalid JSON in LLM response, retrying", error=str(e))
+                # Add retry instruction to system message
+                messages[0]["content"] = messages[0]["content"] + "\n\nIMPORTANT: Return strict JSON per schema only. No additional text."
+                raise ValueError("Invalid JSON response")
+            
             logger.info("LLM request successful", 
                        latency_ms=self.last_latency_ms,
                        trace_id=trace_id)
             
-            return result
+            return {
+                "trace_id": trace_id,
+                "latency_ms": self.last_latency_ms,
+                "data": parsed_content
+            }
             
         except httpx.HTTPStatusError as e:
             logger.error("LLM request failed with HTTP error", 
@@ -125,32 +149,17 @@ class LLMGateway:
                         trace_id=trace_id)
             raise
     
-    def _validate_response(self, response: Dict[str, Any], evidence: List[EvidenceChunk]) -> Dict[str, Any]:
+    def _validate_response(self, response_data: Dict[str, Any], evidence: List[EvidenceChunk]) -> Dict[str, Any]:
         """Validate LLM response against schema."""
         try:
-            # Extract content from response
-            content = response.get("choices", [{}])[0].get("message", {}).get("content", "")
-            
-            if not content:
-                logger.warning("Empty LLM response")
-                return {"sections": []}
-            
-            # Try to parse JSON
-            try:
-                parsed_content = json.loads(content)
-            except json.JSONDecodeError as e:
-                logger.error("Invalid JSON in LLM response", error=str(e))
-                # Try to extract JSON from response
-                parsed_content = self._extract_json_from_text(content)
-            
-            # Validate against schema
-            if "sections" not in parsed_content:
+            # Check if response has sections
+            if "sections" not in response_data:
                 logger.warning("No sections in LLM response")
                 return {"sections": []}
             
             # Validate each section and item
             validated_sections = []
-            for section in parsed_content["sections"]:
+            for section in response_data["sections"]:
                 validated_section = self._validate_section(section, evidence)
                 if validated_section:
                     validated_sections.append(validated_section)
@@ -160,22 +169,6 @@ class LLMGateway:
         except Exception as e:
             logger.error("Response validation failed", error=str(e))
             return {"sections": []}
-    
-    def _extract_json_from_text(self, text: str) -> Dict[str, Any]:
-        """Extract JSON from text that might contain extra content."""
-        # Look for JSON object boundaries
-        start_idx = text.find('{')
-        end_idx = text.rfind('}')
-        
-        if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
-            json_text = text[start_idx:end_idx + 1]
-            try:
-                return json.loads(json_text)
-            except json.JSONDecodeError:
-                pass
-        
-        # Fallback: return empty structure
-        return {"sections": []}
     
     def _validate_section(self, section: Dict[str, Any], evidence: List[EvidenceChunk]) -> Optional[Dict[str, Any]]:
         """Validate a section and its items."""
@@ -249,10 +242,10 @@ class LLMGateway:
         ]
         
         # Make request
-        response = self._make_request_with_retry(messages, trace_id)
+        response_data = self._make_request_with_retry(messages, trace_id)
         
         # Extract markdown content
-        content = response.get("choices", [{}])[0].get("message", {}).get("content", "")
+        content = response_data["data"].get("choices", [{}])[0].get("message", {}).get("content", "")
         
         logger.info("LLM digest summarization completed", trace_id=trace_id)
         
@@ -277,6 +270,15 @@ class LLMGateway:
             text_parts.append("")
         
         return "\n".join(text_parts)
+    
+    def get_request_stats(self) -> Dict[str, Any]:
+        """Get request statistics."""
+        return {
+            "last_latency_ms": self.last_latency_ms,
+            "endpoint": self.config.endpoint,
+            "model": self.config.model,
+            "timeout_s": self.config.timeout_s
+        }
     
     def close(self):
         """Close the HTTP client."""

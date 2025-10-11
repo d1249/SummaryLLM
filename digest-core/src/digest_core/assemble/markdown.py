@@ -1,5 +1,5 @@
 """
-Markdown output assembler for digest data.
+Markdown output assembler for digest data with Russian localization.
 """
 from pathlib import Path
 from typing import List
@@ -11,7 +11,7 @@ logger = structlog.get_logger()
 
 
 class MarkdownAssembler:
-    """Assemble digest data into Markdown output."""
+    """Assemble digest data into Markdown output with Russian localization."""
     
     def __init__(self):
         self.max_words = 400
@@ -29,9 +29,10 @@ class MarkdownAssembler:
             with open(output_path, 'w', encoding='utf-8') as f:
                 f.write(markdown_content)
             
+            word_count = self._count_words(markdown_content)
             logger.info("Markdown digest written successfully", 
                        output_path=str(output_path),
-                       word_count=self._count_words(markdown_content))
+                       word_count=word_count)
             
         except Exception as e:
             logger.error("Failed to write Markdown digest", 
@@ -77,8 +78,8 @@ class MarkdownAssembler:
                 confidence_text = self._format_confidence(item.confidence)
                 lines.append(f"**Уверенность:** {confidence_text}")
                 
-                # Add evidence reference
-                lines.append(f"**Источник:** [Evidence {item.evidence_id}](#evidence-{item.evidence_id})")
+                # Add evidence reference (required format)
+                lines.append(f"**Источник:** {item.source_ref.get('type', 'unknown')}, evidence {item.evidence_id}")
                 
                 # Add owners if present
                 if item.owners_masked:
@@ -120,7 +121,7 @@ class MarkdownAssembler:
         return content
     
     def _format_confidence(self, confidence: float) -> str:
-        """Format confidence score as text."""
+        """Format confidence score as Russian text."""
         if confidence >= 0.9:
             return "Очень высокая"
         elif confidence >= 0.7:
@@ -182,8 +183,22 @@ class MarkdownAssembler:
             if not any(line.startswith('## ') for line in lines):
                 return False
             
+            # Check for evidence references
+            evidence_refs = [line for line in lines if 'Источник:' in line and 'evidence' in line]
+            if not evidence_refs:
+                logger.warning("No evidence references found in markdown")
+                return False
+            
             return True
             
         except Exception as e:
             logger.warning("Markdown validation failed", error=str(e))
             return False
+    
+    def get_word_count(self, content: str) -> int:
+        """Get word count of content."""
+        return self._count_words(content)
+    
+    def format_evidence_reference(self, source_type: str, evidence_id: str) -> str:
+        """Format evidence reference in required format."""
+        return f"**Источник:** {source_type}, evidence {evidence_id}"

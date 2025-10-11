@@ -1,27 +1,30 @@
 """
-Prometheus metrics collection and export.
+Prometheus metrics collection and export for digest pipeline.
 """
 import time
 from typing import Dict, Any, Optional
-from prometheus_client import Counter, Histogram, Summary, Gauge, start_http_server
+from prometheus_client import Counter, Histogram, Summary, Gauge, start_http_server, CollectorRegistry
 import structlog
 
 logger = structlog.get_logger()
 
 
 class MetricsCollector:
-    """Collect and export Prometheus metrics."""
+    """Collect and export Prometheus metrics for digest pipeline."""
     
     def __init__(self, port: int = 9108):
         self.port = port
         self.start_time = time.time()
+        
+        # Create custom registry
+        self.registry = CollectorRegistry()
         
         # Initialize metrics
         self._init_metrics()
         
         # Start HTTP server for metrics export
         try:
-            start_http_server(port)
+            start_http_server(port, registry=self.registry)
             logger.info("Prometheus metrics server started", port=port)
         except Exception as e:
             logger.warning("Failed to start metrics server", port=port, error=str(e))
@@ -29,76 +32,92 @@ class MetricsCollector:
     def _init_metrics(self):
         """Initialize Prometheus metrics."""
         
-        # Email metrics
-        self.emails_total = Counter(
-            'emails_total',
-            'Total number of emails processed',
-            ['status']  # fetched, filtered, normalized
-        )
-        
         # LLM metrics
         self.llm_latency_ms = Histogram(
             'llm_latency_ms',
             'LLM request latency in milliseconds',
-            buckets=[10, 50, 100, 200, 500, 1000, 2000, 5000]
+            buckets=[10, 50, 100, 200, 500, 1000, 2000, 5000],
+            registry=self.registry
         )
         
         self.llm_tokens_in_total = Counter(
             'llm_tokens_in_total',
-            'Total input tokens sent to LLM'
+            'Total input tokens sent to LLM',
+            registry=self.registry
         )
         
         self.llm_tokens_out_total = Counter(
             'llm_tokens_out_total',
-            'Total output tokens from LLM'
+            'Total output tokens from LLM',
+            registry=self.registry
         )
         
-        self.llm_contract_violations = Counter(
-            'llm_contract_violations_total',
-            'Total LLM contract violations'
+        # Email metrics
+        self.emails_total = Counter(
+            'emails_total',
+            'Total number of emails processed',
+            ['status'],  # fetched, filtered, normalized, failed
+            registry=self.registry
         )
         
         # Pipeline metrics
         self.digest_build_seconds = Summary(
             'digest_build_seconds',
-            'Time spent building digest'
+            'Time spent building digest',
+            registry=self.registry
         )
         
         self.runs_total = Counter(
             'runs_total',
             'Total digest runs',
-            ['status']  # ok, retry, failed
+            ['status'],  # ok, retry, failed
+            registry=self.registry
         )
         
         # Evidence metrics
         self.evidence_chunks_total = Counter(
             'evidence_chunks_total',
             'Total evidence chunks processed',
-            ['stage']  # created, selected, processed
+            ['stage'],  # created, selected, processed
+            registry=self.registry
         )
         
         # Thread metrics
         self.threads_total = Counter(
             'threads_total',
             'Total conversation threads processed',
-            ['status']  # created, filtered, prioritized
+            ['status'],  # created, filtered, prioritized
+            registry=self.registry
         )
         
         # System metrics
         self.system_uptime_seconds = Gauge(
             'system_uptime_seconds',
-            'System uptime in seconds'
+            'System uptime in seconds',
+            registry=self.registry
         )
         
         self.memory_usage_bytes = Gauge(
             'memory_usage_bytes',
-            'Memory usage in bytes'
+            'Memory usage in bytes',
+            registry=self.registry
         )
-    
-    def record_emails_total(self, count: int, status: str):
-        """Record email processing metrics."""
-        self.emails_total.labels(status=status).inc(count)
-        logger.debug("Recorded email metrics", count=count, status=status)
+        
+        # Pipeline stage metrics
+        self.pipeline_stage_duration = Histogram(
+            'pipeline_stage_duration_seconds',
+            'Duration of pipeline stages',
+            ['stage'],  # ingest, normalize, threads, evidence, select, llm, assemble
+            registry=self.registry
+        )
+        
+        # Error metrics
+        self.errors_total = Counter(
+            'errors_total',
+            'Total errors by type',
+            ['error_type', 'stage'],  # validation_error, llm_error, etc.
+            registry=self.registry
+        )
     
     def record_llm_latency(self, latency_ms: float):
         """Record LLM request latency."""
@@ -111,10 +130,10 @@ class MetricsCollector:
         self.llm_tokens_out_total.inc(tokens_out)
         logger.debug("Recorded LLM tokens", tokens_in=tokens_in, tokens_out=tokens_out)
     
-    def record_llm_contract_violation(self):
-        """Record LLM contract violation."""
-        self.llm_contract_violations.inc()
-        logger.warning("Recorded LLM contract violation")
+    def record_emails_total(self, count: int, status: str):
+        """Record email processing metrics."""
+        self.emails_total.labels(status=status).inc(count)
+        logger.debug("Recorded email metrics", count=count, status=status)
     
     def record_digest_build_time(self):
         """Record digest build time."""
@@ -136,6 +155,16 @@ class MetricsCollector:
         """Record thread metrics."""
         self.threads_total.labels(status=status).inc(count)
         logger.debug("Recorded threads", count=count, status=status)
+    
+    def record_pipeline_stage_duration(self, stage: str, duration_seconds: float):
+        """Record pipeline stage duration."""
+        self.pipeline_stage_duration.labels(stage=stage).observe(duration_seconds)
+        logger.debug("Recorded pipeline stage duration", stage=stage, duration=duration_seconds)
+    
+    def record_error(self, error_type: str, stage: str):
+        """Record error occurrence."""
+        self.errors_total.labels(error_type=error_type, stage=stage).inc()
+        logger.debug("Recorded error", error_type=error_type, stage=stage)
     
     def update_system_metrics(self):
         """Update system metrics."""
@@ -159,14 +188,16 @@ class MetricsCollector:
             'uptime_seconds': time.time() - self.start_time,
             'port': self.port,
             'metrics_available': [
-                'emails_total',
                 'llm_latency_ms',
                 'llm_tokens_in_total',
                 'llm_tokens_out_total',
+                'emails_total',
                 'digest_build_seconds',
                 'runs_total',
                 'evidence_chunks_total',
-                'threads_total'
+                'threads_total',
+                'pipeline_stage_duration',
+                'errors_total'
             ]
         }
     
@@ -216,3 +247,34 @@ class MetricsCollector:
                 'error': str(e),
                 'timestamp': time.time()
             }
+    
+    def get_metric_values(self) -> Dict[str, Any]:
+        """Get current metric values for debugging."""
+        try:
+            from prometheus_client import generate_latest
+            from prometheus_client.parser import text_string_to_metric_families
+            
+            # Get metrics in text format
+            metrics_text = generate_latest(self.registry).decode('utf-8')
+            
+            # Parse metrics
+            metrics = {}
+            for family in text_string_to_metric_families(metrics_text):
+                metrics[family.name] = {
+                    'type': family.type,
+                    'help': family.documentation,
+                    'samples': [
+                        {
+                            'name': sample.name,
+                            'labels': sample.labels,
+                            'value': sample.value
+                        }
+                        for sample in family.samples
+                    ]
+                }
+            
+            return metrics
+            
+        except Exception as e:
+            logger.error("Failed to get metric values", error=str(e))
+            return {}

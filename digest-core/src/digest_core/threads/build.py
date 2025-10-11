@@ -2,7 +2,7 @@
 Conversation thread building from normalized messages.
 """
 from collections import defaultdict
-from typing import List, Dict, NamedTuple
+from typing import List, NamedTuple
 from datetime import datetime
 import structlog
 

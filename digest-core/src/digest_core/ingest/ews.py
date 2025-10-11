@@ -8,10 +8,8 @@ from pathlib import Path
 import pytz
 from exchangelib import (
     Credentials, Account, DELEGATE, Configuration, NTLM, 
-    Message, Folder, FolderCollection, Q, EWSDateTime
+    Message, Folder, Q, EWSDateTime
 )
-from exchangelib.folders import Inbox
-from exchangelib.items import Item
 from exchangelib.protocol import BaseProtocol
 import tenacity
 import ssl

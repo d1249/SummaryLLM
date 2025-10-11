@@ -2,7 +2,6 @@
 Markdown output assembler for digest data with Russian localization.
 """
 from pathlib import Path
-from typing import List
 import structlog
 
 from digest_core.llm.schemas import Digest

@@ -1,6 +1,6 @@
 import typer
 import sys
-from digest_core.run import run_digest
+from digest_core.run import run_digest, run_digest_dry_run
 
 app = typer.Typer(add_completion=False)
 
@@ -17,9 +17,8 @@ def run(
     try:
         if dry_run:
             typer.echo("Dry-run mode: ingest+normalize only")
-            # TODO: Implement dry-run mode
-            typer.echo("Dry-run not yet implemented")
-            sys.exit(2)
+            run_digest_dry_run(from_date, sources.split(","), out, model)
+            sys.exit(2)  # Partial success code
         
         run_digest(from_date, sources.split(","), out, model)
         sys.exit(0)  # Success

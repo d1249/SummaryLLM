@@ -2,7 +2,7 @@
 Context selection for relevant evidence chunks.
 """
 import re
-from typing import List, Set
+from typing import List
 import structlog
 
 from digest_core.evidence.split import EvidenceChunk

@@ -2,7 +2,7 @@
 Prometheus metrics collection and export for digest pipeline.
 """
 import time
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 from prometheus_client import Counter, Histogram, Summary, Gauge, start_http_server, CollectorRegistry
 import structlog
 

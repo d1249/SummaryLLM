@@ -5,7 +5,6 @@ This module only provides basic HTML to text conversion.
 """
 import re
 import html
-from typing import List, Dict
 from bs4 import BeautifulSoup
 import structlog
 

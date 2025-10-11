@@ -4,7 +4,7 @@ Test EWS ingestion with mocked exchangelib.
 import pytest
 from unittest.mock import Mock, patch, MagicMock
 from datetime import datetime, timezone, timedelta
-from digest_core.ingest.ews import EWSIngester
+from digest_core.ingest.ews import EWSIngest
 from digest_core.config import Config
 
 
@@ -24,7 +24,7 @@ def mock_config():
 @pytest.fixture
 def ingester(mock_config):
     """EWS ingester with mocked configuration."""
-    return EWSIngester(mock_config)
+    return EWSIngest(mock_config.ews)
 
 
 def test_ntlm_authentication(ingester):

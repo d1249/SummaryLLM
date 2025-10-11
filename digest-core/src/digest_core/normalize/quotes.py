@@ -2,7 +2,6 @@
 Quote and signature cleaning for email normalization.
 """
 import re
-from typing import List, Tuple
 import structlog
 
 logger = structlog.get_logger()
@@ -85,7 +84,7 @@ class QuoteCleaner:
             if self.quote_regex.search(line):
                 in_quote = True
                 quote_level = 1
-                continue
+                continue  # Skip the quote marker line
             
             # Check quote level by counting '>' prefixes
             if in_quote:
@@ -102,6 +101,7 @@ class QuoteCleaner:
                     # No quote prefix, end of quote
                     in_quote = False
                     quote_level = 0
+                    continue  # Skip the first non-quoted line after quote
             
             # Add non-quoted lines
             if not in_quote:

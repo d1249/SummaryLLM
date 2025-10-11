@@ -5,8 +5,9 @@ Daily corporate communications digest with privacy-first design and LLM-powered 
 ## Features
 
 - **EWS Integration**: NTLM authentication, corporate CA trust, incremental sync
-- **Privacy-First**: PII masking before LLM processing with `[[REDACT:TYPE]]` markers
+- **Privacy-First**: PII masking delegated to LLM Gateway API (no local masking)
 - **Idempotent**: T-48h rebuild window for deterministic results
+- **Dry-Run Mode**: Test EWS connectivity and normalization without LLM calls
 - **Observability**: Prometheus metrics (:9108), health checks (:9109), structured JSON logs
 - **Schema Validation**: Strict Pydantic validation for all outputs
 
@@ -254,6 +255,19 @@ For empty days, check:
 - Time window settings (calendar_day vs rolling_24h)
 - Watermark state in `.state` directory
 - EWS connectivity and credentials
+
+## Troubleshooting
+
+For common issues and solutions, see [TROUBLESHOOTING.md](TROUBLESHOOTING.md).
+
+Quick diagnostics:
+```bash
+# Check environment and configuration
+./scripts/print_env.sh
+
+# Test dry-run mode
+python3 -m digest_core.cli --dry-run
+```
 
 ## Development
 

@@ -4,7 +4,7 @@ Test context selector with scoring and filtering.
 import pytest
 from unittest.mock import Mock
 from digest_core.select.context import ContextSelector
-from digest_core.llm.schemas import EvidenceChunk, Thread
+from digest_core.evidence.split import EvidenceChunk
 
 
 @pytest.fixture

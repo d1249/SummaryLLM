@@ -4,7 +4,7 @@ Test evidence splitting with token budget constraints.
 import pytest
 from unittest.mock import Mock
 from digest_core.evidence.split import EvidenceSplitter
-from digest_core.llm.schemas import NormalizedMessage
+from digest_core.ingest.ews import NormalizedMessage
 
 
 @pytest.fixture

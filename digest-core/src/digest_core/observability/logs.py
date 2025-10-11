@@ -5,8 +5,7 @@ import structlog
 import logging
 import sys
 import uuid
-from typing import Any, Dict, Optional
-import json
+from typing import Any, Dict
 
 
 def setup_logging(log_level: str = "INFO") -> None:

@@ -3,8 +3,8 @@ Test markdown and JSON assembly with schema validation.
 """
 import pytest
 from unittest.mock import Mock
-from digest_core.assemble.markdown import MarkdownOutputWriter
-from digest_core.assemble.jsonout import JSONOutputWriter
+from digest_core.assemble.markdown import MarkdownAssembler
+from digest_core.assemble.jsonout import JSONAssembler
 from digest_core.llm.schemas import Digest, Section, Item
 
 

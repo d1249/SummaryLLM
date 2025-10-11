@@ -4,7 +4,7 @@ Main digest pipeline runner.
 import structlog
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import List, Dict, Any
+from typing import List
 import uuid
 
 from digest_core.config import Config
@@ -206,6 +206,128 @@ def run_digest(from_date: str, sources: List[str], out: str, model: str) -> None
     except Exception as e:
         logger.error(
             "Digest run failed",
+            trace_id=trace_id,
+            error=str(e),
+            exc_info=True
+        )
+        metrics.record_run_total("failed")
+        raise
+
+
+def run_digest_dry_run(from_date: str, sources: List[str], out: str, model: str) -> None:
+    """
+    Run digest pipeline in dry-run mode (ingest+normalize only, no LLM/assemble).
+    
+    Args:
+        from_date: Date to process (YYYY-MM-DD or "today")
+        sources: List of source types to process (e.g., ["ews"])
+        out: Output directory path
+        model: LLM model identifier (not used in dry-run)
+    """
+    # Generate trace ID for this run
+    trace_id = str(uuid.uuid4())
+    
+    # Setup logging
+    setup_logging()
+    
+    # Load configuration
+    config = Config()
+    
+    # Initialize metrics collector
+    metrics = MetricsCollector(config.observability.prometheus_port)
+    
+    # Start health check server
+    start_health_server(port=9109)
+    
+    # Parse date
+    if from_date == "today":
+        digest_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    else:
+        digest_date = from_date
+    
+    logger.info(
+        "Starting digest dry-run",
+        trace_id=trace_id,
+        digest_date=digest_date,
+        sources=sources,
+        model=model,
+        output_dir=out
+    )
+    
+    try:
+        # Step 1: Ingest emails from EWS
+        logger.info("Starting email ingestion", stage="ingest")
+        ingest = EWSIngest(config.ews)
+        messages = ingest.fetch_messages(digest_date, config.time)
+        logger.info("Email ingestion completed", emails_fetched=len(messages))
+        metrics.record_emails_total(len(messages), "fetched")
+        
+        # Step 2: Normalize messages
+        logger.info("Starting message normalization", stage="normalize")
+        normalizer = HTMLNormalizer()
+        quote_cleaner = QuoteCleaner()
+        
+        normalized_messages = []
+        for msg in messages:
+            # HTML to text conversion
+            text_body = normalizer.html_to_text(msg.text_body)
+            
+            # Truncate large bodies (200KB limit)
+            text_body = normalizer.truncate_text(text_body, max_bytes=200000)
+            
+            # Clean quotes and signatures
+            cleaned_body = quote_cleaner.clean_quotes(text_body)
+            
+            # Mask PII
+            masked_body = normalizer.mask_pii(cleaned_body)
+            masked_subject = normalizer.mask_pii(msg.subject)
+            
+            # Create normalized message
+            normalized_msg = msg._replace(
+                text_body=masked_body,
+                subject=masked_subject
+            )
+            normalized_messages.append(normalized_msg)
+        
+        logger.info("Message normalization completed", messages_normalized=len(normalized_messages))
+        
+        # Step 3: Build conversation threads
+        logger.info("Starting thread building", stage="threads")
+        thread_builder = ThreadBuilder()
+        threads = thread_builder.build_threads(normalized_messages)
+        logger.info("Thread building completed", threads_created=len(threads))
+        
+        # Step 4: Split into evidence chunks
+        logger.info("Starting evidence splitting", stage="evidence")
+        evidence_splitter = EvidenceSplitter()
+        evidence_chunks = evidence_splitter.split_evidence(threads)
+        logger.info("Evidence splitting completed", evidence_chunks=len(evidence_chunks))
+        
+        # Step 5: Select relevant context
+        logger.info("Starting context selection", stage="select")
+        context_selector = ContextSelector()
+        selected_evidence = context_selector.select_context(evidence_chunks)
+        logger.info("Context selection completed", evidence_selected=len(selected_evidence))
+        
+        # Dry-run stops here - no LLM processing or assembly
+        
+        # Record success metrics
+        metrics.record_run_total("ok")
+        metrics.record_digest_build_time()
+        
+        logger.info(
+            "Digest dry-run completed successfully",
+            trace_id=trace_id,
+            digest_date=digest_date,
+            emails_processed=len(messages),
+            threads_created=len(threads),
+            evidence_chunks=len(evidence_chunks),
+            selected_evidence=len(selected_evidence)
+        )
+        
+    except Exception as e:
+        logger.error(
+            "Digest dry-run failed",
             trace_id=trace_id,
             error=str(e),
             exc_info=True

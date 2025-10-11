@@ -3,7 +3,7 @@ Configuration management using pydantic-settings.
 """
 from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Optional
 import os
 
 

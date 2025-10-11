@@ -3,7 +3,6 @@ Evidence splitting for LLM processing.
 """
 import uuid
 from typing import List, NamedTuple, Dict, Any
-from datetime import datetime
 import structlog
 
 from digest_core.threads.build import ConversationThread

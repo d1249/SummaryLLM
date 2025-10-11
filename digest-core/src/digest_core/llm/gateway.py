@@ -3,14 +3,14 @@ LLM Gateway client for processing evidence chunks with retry logic.
 """
 import json
 import time
-from typing import List, Dict, Any, Optional, Tuple
+from typing import List, Dict, Any, Optional
 import httpx
 import tenacity
 import structlog
 
 from digest_core.config import LLMConfig
 from digest_core.evidence.split import EvidenceChunk
-from digest_core.llm.schemas import Digest, Section, Item
+from digest_core.llm.schemas import Digest
 
 logger = structlog.get_logger()
 

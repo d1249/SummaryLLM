@@ -19,6 +19,7 @@ from digest_core.assemble.jsonout import JSONAssembler
 from digest_core.assemble.markdown import MarkdownAssembler
 from digest_core.observability.logs import setup_logging
 from digest_core.observability.metrics import MetricsCollector
+from digest_core.observability.healthz import start_health_server
 from digest_core.llm.schemas import Digest
 
 
@@ -47,11 +48,35 @@ def run_digest(from_date: str, sources: List[str], out: str, model: str) -> None
     # Initialize metrics collector
     metrics = MetricsCollector(config.observability.prometheus_port)
     
+    # Start health check server
+    start_health_server(port=9109)
+    
     # Parse date
     if from_date == "today":
         digest_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     else:
         digest_date = from_date
+    
+    # Check for existing artifacts (idempotency with T-48h rebuild window)
+    output_dir = Path(out)
+    json_path = output_dir / f"digest-{digest_date}.json"
+    md_path = output_dir / f"digest-{digest_date}.md"
+    
+    if json_path.exists() and md_path.exists():
+        # Check if artifacts are recent (within T-48h rebuild window)
+        artifact_age_hours = (datetime.now(timezone.utc).timestamp() - json_path.stat().st_mtime) / 3600
+        if artifact_age_hours < 48:
+            logger.info("Existing artifacts found within T-48h window, skipping rebuild",
+                       digest_date=digest_date,
+                       artifact_age_hours=artifact_age_hours,
+                       trace_id=trace_id)
+            metrics.record_run_total("ok")
+            return
+        else:
+            logger.info("Existing artifacts outside T-48h window, rebuilding",
+                       digest_date=digest_date,
+                       artifact_age_hours=artifact_age_hours,
+                       trace_id=trace_id)
     
     logger.info(
         "Starting digest run",
@@ -79,6 +104,9 @@ def run_digest(from_date: str, sources: List[str], out: str, model: str) -> None
         for msg in messages:
             # HTML to text conversion
             text_body = normalizer.html_to_text(msg.text_body)
+            
+            # Truncate large bodies (200KB limit)
+            text_body = normalizer.truncate_text(text_body, max_bytes=200000)
             
             # Clean quotes and signatures
             cleaned_body = quote_cleaner.clean_quotes(text_body)
@@ -138,17 +166,23 @@ def run_digest(from_date: str, sources: List[str], out: str, model: str) -> None
             sections=llm_response.get("sections", [])
         )
         
+        # Metrics for LLM
         logger.info("LLM processing completed", sections_count=len(digest_data.sections))
         metrics.record_llm_latency(llm_gateway.last_latency_ms)
+        meta = llm_response.get("_meta", {})
+        tokens_in = meta.get("tokens_in") or 0
+        tokens_out = meta.get("tokens_out") or 0
+        try:
+            metrics.record_llm_tokens(int(tokens_in or 0), int(tokens_out or 0))
+        except Exception:
+            pass
         
         # Step 7: Assemble outputs
         logger.info("Starting output assembly", stage="assemble")
-        output_dir = Path(out)
-        output_dir.mkdir(exist_ok=True)
+        output_dir.mkdir(parents=True, exist_ok=True)
         
         # Write JSON output
         json_assembler = JSONAssembler()
-        json_path = output_dir / f"digest-{digest_date}.json"
         json_assembler.write_digest(digest_data, json_path)
         
         # Write Markdown output

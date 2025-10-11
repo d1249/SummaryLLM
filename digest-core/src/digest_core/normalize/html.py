@@ -44,8 +44,13 @@ class HTMLNormalizer:
             
             # Remove tracking pixels and images
             for img in soup.find_all('img'):
-                if img.get('src', '').startswith('cid:'):
-                    img.decompose()  # Remove inline attachments
+                src = img.get('src', '')
+                # Remove inline attachments (cid:)
+                if src.startswith('cid:'):
+                    img.decompose()
+                # Remove 1x1 tracking pixels
+                elif (img.get('width') == '1' or img.get('height') == '1'):
+                    img.decompose()
             
             # Get text content
             text = soup.get_text()
@@ -93,7 +98,29 @@ class HTMLNormalizer:
         for pattern in self.name_patterns:
             masked_text = pattern.sub('[[REDACT:NAME]]', masked_text)
         
+        # Denylist check: verify no raw PII patterns remain
+        self._validate_no_leakage(masked_text)
+        
         return masked_text
+    
+    def _validate_no_leakage(self, text: str) -> None:
+        """Validate that no raw PII patterns remain after masking."""
+        # Check for email leakage
+        if self.pii_patterns['email'].search(text):
+            leaked = self.pii_patterns['email'].findall(text)
+            logger.warning("Email leakage detected after masking", leaked_count=len(leaked))
+        
+        # Check for phone leakage
+        if self.pii_patterns['phone'].search(text):
+            logger.warning("Phone leakage detected after masking")
+        
+        # Check for SSN leakage
+        if self.pii_patterns['ssn'].search(text):
+            logger.warning("SSN leakage detected after masking")
+        
+        # Check for credit card leakage
+        if self.pii_patterns['credit_card'].search(text):
+            logger.warning("Credit card leakage detected after masking")
     
     def truncate_text(self, text: str, max_bytes: int = 200000) -> str:
         """Truncate text if it exceeds size limit."""

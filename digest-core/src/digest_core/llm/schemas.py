@@ -14,6 +14,8 @@ class Section(BaseModel):
     items: List[Item]
 
 class Digest(BaseModel):
+    schema_version: str = "1.0"
+    prompt_version: str
     digest_date: str
     trace_id: str
     sections: List[Section]

@@ -31,16 +31,35 @@ class ThreadBuilder:
         """Build conversation threads from normalized messages."""
         logger.info("Building conversation threads", message_count=len(messages))
         
-        # Group messages by conversation_id
+        # Deduplicate messages by msg_id first
+        seen_ids = set()
+        unique_messages = []
+        for msg in messages:
+            if msg.msg_id not in seen_ids:
+                seen_ids.add(msg.msg_id)
+                unique_messages.append(msg)
+        
+        if len(unique_messages) < len(messages):
+            logger.info("Deduplicated messages", 
+                       original=len(messages), 
+                       unique=len(unique_messages))
+        
+        # Group messages by conversation_id or normalized subject
         conversation_groups = defaultdict(list)
         
-        for msg in messages:
+        for msg in unique_messages:
             if msg.conversation_id:
                 conversation_groups[msg.conversation_id].append(msg)
             else:
-                # Messages without conversation_id are treated as single-message threads
-                single_thread_id = f"single_{msg.msg_id}"
-                conversation_groups[single_thread_id].append(msg)
+                # Fallback: use normalized subject as thread key
+                norm_subject = self._normalize_subject(msg.subject)
+                if norm_subject:
+                    thread_id = f"subj_{hash(norm_subject)}"
+                    conversation_groups[thread_id].append(msg)
+                else:
+                    # Messages without conversation_id or subject are single-message threads
+                    single_thread_id = f"single_{msg.msg_id}"
+                    conversation_groups[single_thread_id].append(msg)
         
         logger.info("Grouped messages", thread_count=len(conversation_groups))
         
@@ -157,3 +176,22 @@ class ThreadBuilder:
         logger.info("Threads prioritized", thread_count=len(prioritized_threads))
         
         return prioritized_threads
+    
+    def _normalize_subject(self, subject: str) -> str:
+        """Normalize subject for threading (remove Re:, Fwd:, etc.)."""
+        import re
+        if not subject:
+            return ""
+        
+        # Remove common prefixes
+        normalized = subject.strip()
+        prefixes = [r'^Re:\s*', r'^RE:\s*', r'^Fwd:\s*', r'^FW:\s*', 
+                   r'^Fw:\s*', r'^\[.*?\]\s*']
+        
+        for prefix in prefixes:
+            normalized = re.sub(prefix, '', normalized, flags=re.IGNORECASE)
+        
+        # Remove extra whitespace
+        normalized = ' '.join(normalized.split())
+        
+        return normalized.lower()

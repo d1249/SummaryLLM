@@ -12,7 +12,7 @@ from exchangelib import (
 )
 from exchangelib.folders import Inbox
 from exchangelib.items import Item
-from exchangelib.protocol import BaseProtocol, NoVerifyHTTPAdapter
+from exchangelib.protocol import BaseProtocol
 import tenacity
 import ssl
 
@@ -66,17 +66,15 @@ class EWSIngest:
             password=self.config.get_ews_password()
         )
         
-        # Create configuration with NTLM auth
+        # Attach SSL context that trusts corporate CA
+        BaseProtocol.SSL_CONTEXT = self.ssl_context
+
+        # Create configuration with NTLM auth and explicit service endpoint
         config_obj = Configuration(
-            server=self.config.endpoint,
+            service_endpoint=self.config.endpoint,
             credentials=credentials,
             auth_type=NTLM,
-            verify_ssl=True,
-            ca_cert=self.config.verify_ca
         )
-        
-        # Set SSL context for corporate CA
-        BaseProtocol.HTTP_ADAPTER_CLS = NoVerifyHTTPAdapter
         
         # Create account with explicit settings
         self.account = Account(
@@ -235,15 +233,16 @@ class EWSIngest:
         # Calculate time window
         start_date, end_date = self._get_time_window(digest_date, time_config)
         
-        # Check SyncState for incremental processing
-        sync_state = self._load_sync_state()
-        if sync_state:
-            logger.info("Using SyncState for incremental processing", sync_state=sync_state)
-            # Use SyncState to get only new/changed items
-            raw_messages = self._fetch_with_sync_state(account.inbox, sync_state)
-        else:
-            # Full fetch for the time window
-            raw_messages = self._fetch_messages_with_retry(account.inbox, start_date, end_date)
+        # Check SyncState/Watermark for incremental processing
+        watermark = self._load_sync_state()
+        if watermark:
+            try:
+                start_date = datetime.fromisoformat(watermark)
+                logger.info("Using watermark for incremental window", start=start_date.isoformat())
+            except Exception:
+                logger.warning("Invalid watermark format, doing full fetch", watermark=watermark)
+        # Fetch with retry over the computed window
+        raw_messages = self._fetch_messages_with_retry(account.inbox, start_date, end_date)
         
         logger.info("Raw messages fetched", count=len(raw_messages))
         
@@ -265,7 +264,7 @@ class EWSIngest:
         return normalized_messages
     
     def _load_sync_state(self) -> Optional[str]:
-        """Load SyncState from file."""
+        """Load SyncState/watermark (ISO timestamp) from file."""
         sync_state_path = Path(self.config.sync_state_path)
         if not sync_state_path.exists():
             logger.info("No SyncState file found, will perform full fetch")
@@ -280,29 +279,10 @@ class EWSIngest:
             logger.warning("Failed to load SyncState", path=str(sync_state_path), error=str(e))
             return None
     
-    def _fetch_with_sync_state(self, folder: Folder, sync_state: str) -> List[Message]:
-        """Fetch messages using SyncState for incremental processing."""
-        try:
-            # Use SyncFolderItems for incremental sync
-            from exchangelib.services import SyncFolderItems
-            
-            # This is a simplified implementation
-            # In practice, you'd use the SyncFolderItems service properly
-            logger.info("Performing incremental sync with SyncState")
-            
-            # For now, fall back to regular fetch
-            # TODO: Implement proper SyncFolderItems usage
-            return []
-            
-        except Exception as e:
-            logger.warning("SyncState fetch failed, falling back to full fetch", error=str(e))
-            # Fall back to full fetch
-            now_utc = datetime.now(timezone.utc)
-            start_utc = now_utc - timedelta(hours=self.config.lookback_hours)
-            return self._fetch_messages_with_retry(folder, start_utc, now_utc)
+    # Note: Real EWS SyncFolderItems can be added later; MVP uses timestamp watermark
     
     def _update_sync_state(self, last_processed: datetime) -> None:
-        """Update SyncState for incremental processing."""
+        """Update timestamp watermark for incremental processing."""
         sync_state_path = Path(self.config.sync_state_path)
         sync_state_path.parent.mkdir(parents=True, exist_ok=True)
         

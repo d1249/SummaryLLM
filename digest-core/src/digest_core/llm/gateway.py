@@ -27,7 +27,7 @@ class LLMGateway:
         )
     
     def extract_actions(self, evidence: List[EvidenceChunk], prompt_template: str, trace_id: str) -> Dict[str, Any]:
-        """Extract actions from evidence using LLM with retry logic."""
+        """Extract actions from evidence using LLM with retry logic and quality retry."""
         logger.info("Starting LLM action extraction", 
                    evidence_count=len(evidence), 
                    trace_id=trace_id)
@@ -51,12 +51,25 @@ class LLMGateway:
         response_data = self._make_request_with_retry(messages, trace_id)
         
         # Validate response
-        validated_response = self._validate_response(response_data["data"], evidence)
+        validated_response = self._validate_response(response_data.get("data", {}), evidence)
+
+        # If empty result but we have promising evidence, perform one quality retry
+        if not validated_response.get("sections"):
+            has_positive = any(ec.priority_score >= 1.5 for ec in evidence)
+            if has_positive:
+                logger.info("Quality retry: empty sections but positive signals present", trace_id=trace_id)
+                quality_hint = "\n\nIMPORTANT: If there are actionable requests or deadlines, return items accordingly. Return strict JSON per schema only."
+                messages[0]["content"] = messages[0]["content"] + quality_hint
+                response_data = self._make_request_with_retry(messages, trace_id)
+                validated_response = self._validate_response(response_data.get("data", {}), evidence)
         
         logger.info("LLM action extraction completed", 
                    sections_count=len(validated_response.get("sections", [])),
                    trace_id=trace_id)
         
+        # Attach meta if available
+        if "meta" in response_data:
+            validated_response["_meta"] = response_data["meta"]
         return validated_response
     
     def _prepare_evidence_text(self, evidence: List[EvidenceChunk]) -> str:
@@ -127,14 +140,47 @@ class LLMGateway:
                 messages[0]["content"] = messages[0]["content"] + "\n\nIMPORTANT: Return strict JSON per schema only. No additional text."
                 raise ValueError("Invalid JSON response")
             
+            # Try to capture token usage from headers or body
+            tokens_in = None
+            tokens_out = None
+            # Common header variants
+            header_keys_in = [
+                "x-llm-tokens-in", "x-tokens-in", "x-usage-tokens-in"
+            ]
+            header_keys_out = [
+                "x-llm-tokens-out", "x-tokens-out", "x-usage-tokens-out"
+            ]
+            for k in header_keys_in:
+                if k in response.headers:
+                    try:
+                        tokens_in = int(response.headers[k])
+                        break
+                    except Exception:
+                        pass
+            for k in header_keys_out:
+                if k in response.headers:
+                    try:
+                        tokens_out = int(response.headers[k])
+                        break
+                    except Exception:
+                        pass
+            # Body usage fallback
+            usage = result.get("usage") or {}
+            if tokens_in is None:
+                tokens_in = usage.get("prompt_tokens")
+            if tokens_out is None:
+                tokens_out = usage.get("completion_tokens")
+
             logger.info("LLM request successful", 
                        latency_ms=self.last_latency_ms,
+                       tokens_in=tokens_in, tokens_out=tokens_out,
                        trace_id=trace_id)
             
             return {
                 "trace_id": trace_id,
                 "latency_ms": self.last_latency_ms,
-                "data": parsed_content
+                "data": parsed_content,
+                "meta": {"tokens_in": tokens_in, "tokens_out": tokens_out}
             }
             
         except httpx.HTTPStatusError as e:

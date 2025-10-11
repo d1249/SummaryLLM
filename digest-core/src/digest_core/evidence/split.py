@@ -84,12 +84,13 @@ class EvidenceSplitter:
         chunk_count = 0
         
         for paragraph in paragraphs:
-            # Estimate tokens (rough approximation: 1 token ≈ 4 characters)
-            paragraph_tokens = len(paragraph) // 4
+            # Estimate tokens (rough approximation: 1.3 tokens per word)
+            paragraph_tokens = int(len(paragraph.split()) * 1.3)
             
             # If adding this paragraph would exceed max tokens, finalize current chunk
-            if (len(current_chunk) // 4) + paragraph_tokens > self.max_tokens_per_chunk:
-                if current_chunk and (len(current_chunk) // 4) >= self.min_tokens_per_chunk:
+            current_chunk_tokens = int(len(current_chunk.split()) * 1.3)
+            if current_chunk_tokens + paragraph_tokens > self.max_tokens_per_chunk:
+                if current_chunk and current_chunk_tokens >= self.min_tokens_per_chunk:
                     chunk = self._create_evidence_chunk(
                         current_chunk, conversation_id, message, message_index, chunk_count
                     )
@@ -116,7 +117,8 @@ class EvidenceSplitter:
                 break
         
         # Add final chunk if it exists
-        if current_chunk and (len(current_chunk) // 4) >= self.min_tokens_per_chunk:
+        final_chunk_tokens = int(len(current_chunk.split()) * 1.3)
+        if current_chunk and final_chunk_tokens >= self.min_tokens_per_chunk:
             chunk = self._create_evidence_chunk(
                 current_chunk, conversation_id, message, message_index, chunk_count
             )
@@ -176,7 +178,7 @@ class EvidenceSplitter:
     def _create_evidence_chunk(self, content: str, conversation_id: str, message, message_index: int, chunk_index: int) -> EvidenceChunk:
         """Create an evidence chunk from content."""
         evidence_id = str(uuid.uuid4())
-        token_count = len(content) // 4  # Rough token estimation
+        token_count = int(len(content.split()) * 1.3)  # Token estimation: 1.3 tokens per word
         
         # Calculate priority score based on content characteristics
         priority_score = self._calculate_priority_score(content, message)

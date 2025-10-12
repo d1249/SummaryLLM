@@ -26,7 +26,7 @@ from digest_core.llm.schemas import Digest
 logger = structlog.get_logger()
 
 
-def run_digest(from_date: str, sources: List[str], out: str, model: str) -> None:
+def run_digest(from_date: str, sources: List[str], out: str, model: str, window: str) -> None:
     """
     Run the complete digest pipeline.
     
@@ -44,6 +44,17 @@ def run_digest(from_date: str, sources: List[str], out: str, model: str) -> None
     
     # Load configuration
     config = Config()
+    # Override model/window from CLI if provided
+    if model:
+        try:
+            config.llm.model = model
+        except Exception:
+            pass
+    if window in ("calendar_day", "rolling_24h"):
+        try:
+            config.time.window = window
+        except Exception:
+            pass
     
     # Initialize metrics collector
     metrics = MetricsCollector(config.observability.prometheus_port)
@@ -142,9 +153,11 @@ def run_digest(from_date: str, sources: List[str], out: str, model: str) -> None
         logger.info("Starting LLM processing", stage="llm")
         llm_gateway = LLMGateway(config.llm)
         
-        # Load prompts
+        # Load prompts (switch to EN prompt for qwen models)
         prompts_dir = Path("prompts")
-        extract_prompt = (prompts_dir / "extract_actions.v1.j2").read_text()
+        model_lower = (config.llm.model or "").lower()
+        extract_prompt_name = "extract_actions.en.v1.j2" if "qwen" in model_lower else "extract_actions.v1.j2"
+        extract_prompt = (prompts_dir / extract_prompt_name).read_text()
         
         # Send to LLM and validate response
         llm_response = llm_gateway.extract_actions(
@@ -210,7 +223,7 @@ def run_digest(from_date: str, sources: List[str], out: str, model: str) -> None
         raise
 
 
-def run_digest_dry_run(from_date: str, sources: List[str], out: str, model: str) -> None:
+def run_digest_dry_run(from_date: str, sources: List[str], out: str, model: str, window: str) -> None:
     """
     Run digest pipeline in dry-run mode (ingest+normalize only, no LLM/assemble).
     
@@ -228,6 +241,17 @@ def run_digest_dry_run(from_date: str, sources: List[str], out: str, model: str)
     
     # Load configuration
     config = Config()
+    # Override model/window from CLI if provided
+    if model:
+        try:
+            config.llm.model = model
+        except Exception:
+            pass
+    if window in ("calendar_day", "rolling_24h"):
+        try:
+            config.time.window = window
+        except Exception:
+            pass
     
     # Initialize metrics collector
     metrics = MetricsCollector(config.observability.prometheus_port)

@@ -27,10 +27,10 @@ def run(
         
         if dry_run:
             typer.echo("Dry-run mode: ingest+normalize only")
-            run_digest_dry_run(from_date, sources.split(","), out, model)
+            run_digest_dry_run(from_date, sources.split(","), out, model, window)
             exit_code = 2  # Partial success code
         else:
-            run_digest(from_date, sources.split(","), out, model)
+            run_digest(from_date, sources.split(","), out, model, window)
             exit_code = 0  # Success
         
         # Collect diagnostics if requested

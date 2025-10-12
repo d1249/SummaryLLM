@@ -31,6 +31,8 @@ fi
 # Collected configuration (using individual variables instead of associative array for compatibility)
 EWS_ENDPOINT=""
 EWS_USER_UPN=""
+EWS_LOGIN=""
+EWS_DOMAIN=""
 EWS_PASSWORD=""
 EWS_CA_CERT=""
 EWS_FOLDERS=""
@@ -146,6 +148,74 @@ validate_certificate() {
             return 1
         fi
     else
+        return 1
+    fi
+}
+
+test_ews_ntlm_connection() {
+    print_info "Тестирование NTLM-подключения к EWS..."
+    
+    # Create temporary file for FindItem SOAP request
+    local finditem_xml=$(mktemp)
+    cat > "$finditem_xml" << 'SOAP_EOF'
+<?xml version="1.0" encoding="utf-8"?>
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"
+               xmlns:t="http://schemas.microsoft.com/exchange/services/2006/types">
+  <soap:Body>
+    <FindItem Traversal="Shallow" xmlns="http://schemas.microsoft.com/exchange/services/2006/messages">
+      <ItemShape>
+        <t:BaseShape>IdOnly</t:BaseShape>
+      </ItemShape>
+      <ParentFolderIds>
+        <t:DistinguishedFolderId Id="inbox"/>
+      </ParentFolderIds>
+    </FindItem>
+  </soap:Body>
+</soap:Envelope>
+SOAP_EOF
+    
+    # Execute NTLM request
+    local ntlm_user="${EWS_LOGIN}@${EWS_DOMAIN}"
+    print_info "Попытка подключения с логином: $ntlm_user"
+    
+    local response
+    response=$(curl -s --ntlm -u "$ntlm_user:$EWS_PASSWORD" \
+        -H 'Content-Type: text/xml; charset=utf-8' \
+        -H 'SOAPAction: http://schemas.microsoft.com/exchange/services/2006/messages/FindItem' \
+        --data @"$finditem_xml" \
+        --max-time 30 \
+        "$EWS_ENDPOINT" 2>&1)
+    
+    local curl_exit_code=$?
+    rm -f "$finditem_xml"
+    
+    # Check result
+    if [[ $curl_exit_code -ne 0 ]]; then
+        print_error "Ошибка выполнения curl (код: $curl_exit_code)"
+        print_info "Проверьте сетевую доступность endpoint"
+        return 1
+    fi
+    
+    if echo "$response" | grep -q "ResponseCode"; then
+        if echo "$response" | grep -q "NoError"; then
+            print_success "NTLM-аутентификация успешна!"
+            return 0
+        elif echo "$response" | grep -q "ErrorAccessDenied"; then
+            print_error "Ошибка доступа - проверьте логин/пароль"
+            return 1
+        else
+            print_warning "Получен ответ от сервера, но не NoError"
+            if [[ "$VERBOSE" == "true" ]]; then
+                echo "$response" | head -20
+            fi
+            return 0
+        fi
+    else
+        print_error "Не получен корректный SOAP-ответ от EWS"
+        print_info "Проверьте endpoint и сетевую доступность"
+        if [[ "$VERBOSE" == "true" ]]; then
+            echo "$response" | head -20
+        fi
         return 1
     fi
 }
@@ -326,53 +396,65 @@ backup_configs() {
 collect_ews_config() {
     print_step "EWS Configuration"
     
-    # EWS endpoint
-    while true; do
-        prompt_with_default "Enter EWS endpoint URL" "" "EWS_ENDPOINT"
-        if validate_https "$EWS_ENDPOINT"; then
-            print_success "Valid HTTPS URL"
-            break
-        else
-            print_error "Please enter a valid HTTPS URL"
-        fi
+    # 1. User login for NTLM
+    prompt_with_default "Введите ваш логин (например, ivanov)" "" "EWS_LOGIN"
+    while [[ -z "$EWS_LOGIN" ]]; do
+        print_error "Логин не может быть пустым"
+        prompt_with_default "Введите ваш логин (например, ivanov)" "" "EWS_LOGIN"
     done
+    print_success "Логин: $EWS_LOGIN"
     
-    # User UPN/email
+    # 2. Corporate email (UPN)
     while true; do
-        prompt_with_default "Enter your email (UPN)" "" "EWS_USER_UPN"
+        prompt_with_default "Введите корпоративную почту" "" "EWS_USER_UPN"
         if validate_email "$EWS_USER_UPN"; then
-            print_success "Valid email format"
+            print_success "Валидный email: $EWS_USER_UPN"
             break
         else
-            print_error "Please enter a valid email address"
+            print_error "Введите корректный email адрес"
         fi
     done
     
-    # Password
-    prompt_password "Enter EWS password" "EWS_PASSWORD"
-    print_success "Password captured"
+    # 3. Extract domain from email
+    EWS_DOMAIN="${EWS_USER_UPN#*@}"
+    print_info "Домен определён как: $EWS_DOMAIN"
+    
+    # 4. EWS endpoint with default based on domain
+    while true; do
+        prompt_with_default "Введите EWS endpoint URL" "https://owa.$EWS_DOMAIN/EWS/Exchange.asmx" "EWS_ENDPOINT"
+        if validate_https "$EWS_ENDPOINT"; then
+            print_success "Валидный HTTPS URL"
+            break
+        else
+            print_error "Введите корректный HTTPS URL"
+        fi
+    done
+    
+    # 5. Password
+    prompt_password "Введите пароль EWS" "EWS_PASSWORD"
+    print_success "Пароль получен"
     
     # Corporate CA certificate
-    prompt_with_default "Corporate CA certificate path (leave empty to skip)" "" "EWS_CA_CERT"
+    prompt_with_default "Путь к корпоративному CA сертификату (оставьте пустым для пропуска)" "" "EWS_CA_CERT"
     if [[ -n "$EWS_CA_CERT" ]]; then
         if validate_certificate "$EWS_CA_CERT"; then
-            print_success "Certificate file found and valid"
+            print_success "Файл сертификата найден и валиден"
         else
-            print_error "Invalid certificate file or path"
+            print_error "Неверный файл сертификата или путь"
             EWS_CA_CERT=""
         fi
     fi
     
     # Folders
-    prompt_with_default "Folders to process (comma-separated)" "Inbox" "EWS_FOLDERS"
+    prompt_with_default "Папки для обработки (через запятую)" "Inbox" "EWS_FOLDERS"
     
     # Lookback hours
     while true; do
-        prompt_with_default "Lookback hours" "24" "EWS_LOOKBACK_HOURS"
+        prompt_with_default "Период просмотра (часы)" "24" "EWS_LOOKBACK_HOURS"
         if [[ "$EWS_LOOKBACK_HOURS" =~ ^[0-9]+$ ]] && [[ "$EWS_LOOKBACK_HOURS" -gt 0 ]]; then
             break
         else
-            print_error "Please enter a positive number"
+            print_error "Введите положительное число"
         fi
     done
 }
@@ -494,6 +576,18 @@ validate_connectivity() {
         print_warning "This might be normal if the endpoint requires authentication"
     fi
     
+    # Test EWS NTLM authentication
+    echo
+    if ! test_ews_ntlm_connection; then
+        print_error "NTLM-тест не пройден"
+        read -p "Продолжить несмотря на ошибку? [y/N]: " continue_choice
+        if [[ ! "$continue_choice" =~ ^[Yy]$ ]]; then
+            print_error "Установка прервана пользователем"
+            exit 1
+        fi
+    fi
+    echo
+    
     # Test LLM connectivity
     print_info "Testing LLM endpoint..."
     if check_connectivity "$LLM_ENDPOINT" 10; then
@@ -524,6 +618,8 @@ generate_env_file() {
 # EWS Configuration
 EWS_PASSWORD="$EWS_PASSWORD"
 EWS_USER_UPN="$EWS_USER_UPN"
+EWS_LOGIN="$EWS_LOGIN"
+EWS_DOMAIN="$EWS_DOMAIN"
 EWS_ENDPOINT="$EWS_ENDPOINT"
 
 # LLM Configuration
@@ -553,6 +649,8 @@ time:
 ews:
   endpoint: "$EWS_ENDPOINT"
   user_upn: "$EWS_USER_UPN"
+  user_login: "$EWS_LOGIN"
+  user_domain: "$EWS_DOMAIN"
   password_env: "EWS_PASSWORD"
   verify_ca: "$EWS_CA_CERT"
   autodiscover: false

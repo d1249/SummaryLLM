@@ -19,6 +19,8 @@ class EWSConfig(BaseModel):
     """Exchange Web Services configuration."""
     endpoint: str = Field(default="", description="EWS endpoint URL")
     user_upn: str = Field(default="", description="User UPN (user@corp)")
+    user_login: Optional[str] = Field(default=None, description="User login for NTLM (e.g., ivanov)")
+    user_domain: Optional[str] = Field(default=None, description="Domain for NTLM (e.g., corp-domain.ru)")
     password_env: str = Field(default="EWS_PASSWORD", description="Environment variable for password")
     verify_ca: Optional[str] = Field(default=None, description="Path to CA certificate")
     autodiscover: bool = Field(default=False, description="Enable autodiscover")
@@ -33,6 +35,17 @@ class EWSConfig(BaseModel):
         if not password:
             raise ValueError(f"Environment variable {self.password_env} not set")
         return password
+    
+    def get_ntlm_username(self) -> str:
+        """Get username for NTLM authentication (login@domain format)."""
+        if self.user_login and self.user_domain:
+            return f"{self.user_login}@{self.user_domain}"
+        
+        # Fallback: use user_upn if login/domain not specified
+        if self.user_upn and '@' in self.user_upn:
+            return self.user_upn
+        
+        raise ValueError("Cannot determine NTLM username: user_login and user_domain not set, and user_upn is invalid")
 
 
 class LLMConfig(BaseModel):

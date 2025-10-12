@@ -3,8 +3,10 @@ time:
   window: "calendar_day"
 
 ews:
-  endpoint: "https://ews.corp.com/EWS/Exchange.asmx"
-  user_upn: "user@corp.com"
+  endpoint: "https://owa.corp-domain.ru/EWS/Exchange.asmx"
+  user_upn: "login@corp-domain.ru"
+  user_login: "login"
+  user_domain: "corp-domain.ru"
   password_env: "EWS_PASSWORD"
   verify_ca: "/etc/ssl/corp-ca.pem"
   autodiscover: false

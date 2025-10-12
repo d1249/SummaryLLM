@@ -58,11 +58,14 @@ class EWSIngest:
             
         logger.info("Connecting to EWS", endpoint=self.config.endpoint)
         
-        # Create credentials with UPN
+        # Create credentials with NTLM username (login@domain)
+        ntlm_username = self.config.get_ntlm_username()
         credentials = Credentials(
-            username=self.config.user_upn,
+            username=ntlm_username,
             password=self.config.get_ews_password()
         )
+        
+        logger.debug("Using NTLM authentication", username=ntlm_username)
         
         # Attach SSL context that trusts corporate CA
         BaseProtocol.SSL_CONTEXT = self.ssl_context

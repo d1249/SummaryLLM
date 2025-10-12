@@ -86,7 +86,7 @@ pytest -v
 - **Integration tests** - Test component interactions
 - **Contract tests** - Test LLM Gateway integration
 - **Snapshot tests** - Test output format stability
-- **Leakage tests** - Test PII handling
+- **Privacy tests** - Test PII handling
 
 ### Writing Tests
 
@@ -151,7 +151,7 @@ test: add integration tests for LLM Gateway
 
 - **Never commit** sensitive data or credentials
 - **Use environment variables** for secrets
-- **Follow PII masking** guidelines in code
+- **Follow PII handling** guidelines in code
 - **Test for PII leakage** in outputs and logs
 
 ### Code Security

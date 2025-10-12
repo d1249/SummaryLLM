@@ -64,7 +64,7 @@ class TestLLMIntegration:
         # Load prompt template
         prompt_template = """
         Ты — ассистент, который извлекает только действия и срочные просьбы, адресованные получателю.
-        Сохраняй метки [[REDACT:...]] без изменений. Для каждого пункта верни evidence_id.
+        Для каждого пункта верни evidence_id.
 
         СТРОГО верни JSON по схеме:
         {
@@ -74,7 +74,7 @@ class TestLLMIntegration:
               "items": [
                 {
                   "title": "string",
-                  "owners_masked": ["[[REDACT:...]]"],
+                  "owners_masked": ["список имен ответственных"],
                   "due": "YYYY-MM-DD|null",
                   "evidence_id": "string",
                   "confidence": 0.0-1.0,

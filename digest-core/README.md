@@ -19,7 +19,7 @@ Daily corporate communications digest with privacy-first design and LLM-powered 
 ## Features
 
 - **EWS Integration**: NTLM authentication, corporate CA trust, incremental sync
-- **Privacy-First**: PII masking delegated to LLM Gateway API (no local masking)
+- **Privacy-First**: PII handling delegated to LLM Gateway API
 - **Idempotent**: T-48h rebuild window for deterministic results
 - **Dry-Run Mode**: Test EWS connectivity and normalization without LLM calls
 - **Observability**: Prometheus metrics (:9108), health checks (:9109), structured JSON logs
@@ -204,7 +204,7 @@ The `digest-YYYY-MM-DD.json` file contains structured data with the following sc
       "items": [
         {
           "title": "Утвердить лимиты Q3",
-          "owners_masked": ["[[REDACT:NAME;id=9b3e]]"],
+          "owners_masked": ["Иван Иванов"],
           "due": "2024-01-17",
           "evidence_id": "ev:msghash:1024:480",
           "confidence": 0.86,
@@ -228,11 +228,11 @@ The `digest-YYYY-MM-DD.md` file provides human-readable output:
 # Дайджест — 2024-01-15
 
 ## Мои действия
-- Утвердить лимиты Q3 — до **2024-01-17**. Ответственные: [[REDACT:NAME;id=9b3e]].  
+- Утвердить лимиты Q3 — до **2024-01-17**. Ответственные: Иван Иванов.  
   Источник: письмо «Q3 Budget plan», evidence ev:msghash:1024:480.
 
 ## Срочно
-- [[REDACT:NAME;id=f1d0]] просит подтвердить SLA инцидента #7842.  
+- Петр Петров просит подтвердить SLA инцидента #7842.  
   Источник: «ADP incident update», evidence ev:...
 ```
 
@@ -242,7 +242,7 @@ Each item includes:
 - `evidence_id`: Reference to source evidence fragment
 - `source_ref`: Message metadata (type, msg_id, conversation_id)
 - `confidence`: Extraction confidence score (0-1)
-- `owners_masked`: PII-masked responsible parties
+- `owners_masked`: Responsible parties
 - `due`: Optional deadline
 
 ### Troubleshooting Quick Reference
@@ -397,7 +397,7 @@ make format
 
 ```
 EWS → normalize → thread → evidence split → context select
-  → LLM Gateway (with PII masking) → validate → assemble (JSON/MD)
+  → LLM Gateway (PII handling) → validate → assemble (JSON/MD)
   → metrics + logs
 ```
 
@@ -413,7 +413,7 @@ To force rebuild, delete existing artifacts or use `--force` flag.
 
 ## Privacy & Security
 
-- **PII Masking**: All PII masking (emails, phone numbers, names, SSNs, credit cards, IP addresses) handled by LLM Gateway API
+- **PII Handling**: All PII processing (emails, phone numbers, names, SSNs, credit cards, IP addresses) handled by LLM Gateway API
 - **No Payload Logging**: Message bodies never logged
 - **Corporate CA**: TLS verification with custom CA
 - **Non-root Container**: Docker runs as UID 1001

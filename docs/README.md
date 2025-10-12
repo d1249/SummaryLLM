@@ -77,7 +77,7 @@ python -m digest_core.cli run            # Полный запуск
 ### ✅ Текущие возможности (MVP)
 
 - **EWS Integration** - Подключение к Exchange Web Services с NTLM аутентификацией
-- **Privacy-First Design** - Маскирование PII через LLM Gateway API
+- **Privacy-First Design** - Обработка PII на стороне LLM Gateway API
 - **Idempotent Processing** - Детерминированные результаты с T-48h окном пересборки
 - **Dry-Run Mode** - Тестирование без вызовов LLM
 - **Observability** - Prometheus метрики, health checks, структурированные логи
@@ -94,7 +94,7 @@ python -m digest_core.cli run            # Полный запуск
 
 ```
 EWS → normalize → thread → evidence split → context select
-  → LLM Gateway (with PII masking) → validate → assemble (JSON/MD)
+  → LLM Gateway (PII handling) → validate → assemble (JSON/MD)
   → metrics + logs
 ```
 
@@ -133,8 +133,7 @@ EWS → normalize → thread → evidence split → context select
 
 ### PII Policy
 
-- **Маскирование PII** выполняется на стороне LLM Gateway API
-- **Локальное маскирование** не выполняется
+- **Обработка PII** выполняется на стороне LLM Gateway API
 - **Тела сообщений** никогда не логируются
 - **Секреты** хранятся только в переменных окружения
 

@@ -1,7 +1,6 @@
 """
-HTML to text normalization and PII masking.
-Note: All PII masking is handled by LLM Gateway API.
-This module only provides basic HTML to text conversion.
+HTML to text normalization.
+This module provides basic HTML to text conversion.
 """
 import re
 import html
@@ -12,11 +11,9 @@ logger = structlog.get_logger()
 
 
 class HTMLNormalizer:
-    """HTML to text conversion. PII masking handled by LLM Gateway API."""
+    """HTML to text conversion."""
     
     def __init__(self):
-        # Note: PII masking is now handled by LLM Gateway API
-        # This class only provides HTML to text conversion
         pass
     
     def html_to_text(self, html_content: str) -> str:
@@ -62,11 +59,6 @@ class HTMLNormalizer:
             text = html.unescape(text)
             return text
     
-    def mask_pii(self, text: str) -> str:
-        """PII masking is handled by LLM Gateway API. This method returns text as-is."""
-        # All PII masking is now handled by LLM Gateway API
-        # This method is kept for compatibility but does no masking
-        return text
     
     def truncate_text(self, text: str, max_bytes: int = 200000) -> str:
         """Truncate text if it exceeds size limit."""

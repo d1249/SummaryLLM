@@ -111,14 +111,10 @@ def run_digest(from_date: str, sources: List[str], out: str, model: str) -> None
             # Clean quotes and signatures
             cleaned_body = quote_cleaner.clean_quotes(text_body)
             
-            # Mask PII
-            masked_body = normalizer.mask_pii(cleaned_body)
-            masked_subject = normalizer.mask_pii(msg.subject)
-            
             # Create normalized message
             normalized_msg = msg._replace(
-                text_body=masked_body,
-                subject=masked_subject
+                text_body=cleaned_body,
+                subject=msg.subject
             )
             normalized_messages.append(normalized_msg)
         
@@ -278,14 +274,10 @@ def run_digest_dry_run(from_date: str, sources: List[str], out: str, model: str)
             # Clean quotes and signatures
             cleaned_body = quote_cleaner.clean_quotes(text_body)
             
-            # Mask PII
-            masked_body = normalizer.mask_pii(cleaned_body)
-            masked_subject = normalizer.mask_pii(msg.subject)
-            
             # Create normalized message
             normalized_msg = msg._replace(
-                text_body=masked_body,
-                subject=masked_subject
+                text_body=cleaned_body,
+                subject=msg.subject
             )
             normalized_messages.append(normalized_msg)
         

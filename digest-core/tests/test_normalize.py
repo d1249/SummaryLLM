@@ -104,17 +104,4 @@ def test_multilevel_quotes():
     # Quotes should be removed
 
 
-def test_mask_pii_no_masking():
-    """Test that mask_pii does no masking (handled by LLM Gateway API)."""
-    normalizer = HTMLNormalizer()
-    
-    text = "Contact John Doe at john@company.com or call +1-555-123-4567."
-    masked_text = normalizer.mask_pii(text)
-    
-    # Text should be returned unchanged
-    assert masked_text == text
-    assert "John Doe" in masked_text
-    assert "john@company.com" in masked_text
-    assert "+1-555-123-4567" in masked_text
-    assert "[[REDACT:" not in masked_text
 

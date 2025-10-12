@@ -34,11 +34,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Initial release
 - EWS integration with NTLM authentication
 - LLM-powered digest generation
-- Privacy-first design with PII masking via LLM Gateway
+- Privacy-first design with PII handling via LLM Gateway
 - Idempotent processing with T-48h rebuild window
 - Dry-run mode for testing
 - Prometheus metrics and health checks
-- Structured JSON logs with automatic PII redaction
+- Structured JSON logs with PII handling
 - Schema validation with Pydantic
 - Docker support with non-root container
 - Interactive setup wizard

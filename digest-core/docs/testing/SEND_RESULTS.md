@@ -35,11 +35,11 @@ python3 -m digest_core.cli run --out ./out
 После завершения тестирования найдите созданный архив:
 
 ```bash
-# Архив будет создан в /tmp/
-ls -la /tmp/diagnostics-*.tar.gz
+# Архив будет создан в ~/.digest-temp/
+ls -la ~/.digest-temp/diagnostics-*.tar.gz
 
 # Или найдите последний созданный архив
-ls -t /tmp/diagnostics-*.tar.gz | head -1
+ls -t ~/.digest-temp/diagnostics-*.tar.gz | head -1
 ```
 
 Архив имеет формат: `diagnostics-YYYY-MM-DD-HH-MM-SS.tar.gz`
@@ -50,10 +50,10 @@ ls -t /tmp/diagnostics-*.tar.gz | head -1
 
 ```bash
 # Посмотреть содержимое архива
-tar -tzf /tmp/diagnostics-2024-01-15-10-30-45.tar.gz
+tar -tzf ~/.digest-temp/diagnostics-2024-01-15-10-30-45.tar.gz
 
 # Проверить размер архива
-du -h /tmp/diagnostics-2024-01-15-10-30-45.tar.gz
+du -h ~/.digest-temp/diagnostics-2024-01-15-10-30-45.tar.gz
 ```
 
 **Важно**: Размер архива должен быть меньше 25MB для отправки по email.

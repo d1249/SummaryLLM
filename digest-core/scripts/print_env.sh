@@ -37,20 +37,30 @@ done
 # Check CA certificate
 echo ""
 echo "CA certificate:"
-if [ -f "/etc/ssl/corp-ca.pem" ]; then
-    echo "✓ Corporate CA found: /etc/ssl/corp-ca.pem"
-    echo "  Certificate info:"
-    openssl x509 -in /etc/ssl/corp-ca.pem -text -noout | grep -E "(Subject:|Not Before|Not After)" || true
-else
-    echo "✗ Corporate CA not found: /etc/ssl/corp-ca.pem"
+CA_FOUND=false
+for ca_path in "/etc/ssl/corp-ca.pem" "${HOME}/.ssl/corp-ca.pem" "./certs/corp-ca.pem"; do
+    if [ -f "$ca_path" ]; then
+        echo "✓ Corporate CA found: $ca_path"
+        echo "  Certificate info:"
+        openssl x509 -in "$ca_path" -text -noout | grep -E "(Subject:|Not Before|Not After)" || true
+        CA_FOUND=true
+        break
+    fi
+done
+if [ "$CA_FOUND" = false ]; then
+    echo "✗ Corporate CA not found in standard locations"
+    echo "  Checked paths:"
+    echo "    - /etc/ssl/corp-ca.pem"
+    echo "    - ${HOME}/.ssl/corp-ca.pem"
+    echo "    - ./certs/corp-ca.pem"
 fi
 
 # Check directories
 echo ""
 echo "Directory permissions:"
-for dir in /opt/digest/out /opt/digest/.state; do
+for dir in "${HOME}/.digest-out" "${HOME}/.digest-state" "./out" "./.state"; do
     if [ -d "$dir" ]; then
-        echo "✓ $dir: exists (permissions: $(stat -c %a "$dir"))"
+        echo "✓ $dir: exists (permissions: $(stat -c %a "$dir" 2>/dev/null || stat -f %A "$dir" 2>/dev/null || echo "unknown"))"
     else
         echo "✗ $dir: does not exist"
     fi

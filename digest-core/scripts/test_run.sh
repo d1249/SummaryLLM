@@ -6,8 +6,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 
 # Default values
-OUT_DIR="${OUT_DIR:-/tmp/digest-out}"
-STATE_DIR="${STATE_DIR:-/tmp/digest-state}"
+OUT_DIR="${OUT_DIR:-${HOME}/.digest-out}"
+STATE_DIR="${STATE_DIR:-${HOME}/.digest-state}"
 LOG_LEVEL="${LOG_LEVEL:-DEBUG}"
 COLLECT_LOGS="${COLLECT_LOGS:-true}"
 

@@ -194,6 +194,15 @@ curl http://localhost:9108/metrics
 
 # Проверка логов
 tail -f ~/.digest-logs/run-*.log
+
+# Проверка выходных файлов
+ls -la ~/.digest-out/
+
+# Проверка состояния
+ls -la ~/.digest-state/
+
+# Проверка архивов диагностики
+ls -la ~/.digest-temp/
 ```
 
 ## Контакты для поддержки

@@ -8,7 +8,7 @@ PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 # Generate timestamp for unique archive name
 TIMESTAMP=$(date +"%Y-%m-%d-%H-%M-%S")
 ARCHIVE_NAME="diagnostics-${TIMESTAMP}"
-TEMP_DIR="/tmp/${ARCHIVE_NAME}"
+TEMP_DIR="${HOME}/.digest-temp/${ARCHIVE_NAME}"
 
 echo "Collecting diagnostics for SummaryLLM..."
 echo "Archive name: ${ARCHIVE_NAME}.tar.gz"
@@ -123,7 +123,7 @@ echo "Collecting system information..."
 
 # 5. Collect output files
 echo "Collecting output files..."
-OUTPUT_DIRS=("./out" "/tmp/digest-out" "$HOME/digest-out")
+OUTPUT_DIRS=("./out" "${HOME}/.digest-out" "${HOME}/digest-out")
 for dir in "${OUTPUT_DIRS[@]}"; do
     if [ -d "$dir" ]; then
         safe_copy_dir "$dir" "$TEMP_DIR/output/"
@@ -133,7 +133,7 @@ done
 
 # 6. Collect state files
 echo "Collecting state files..."
-STATE_DIRS=("./.state" "/tmp/digest-state" "$HOME/.digest-state")
+STATE_DIRS=("./.state" "${HOME}/.digest-state" "${HOME}/.state")
 for dir in "${STATE_DIRS[@]}"; do
     if [ -d "$dir" ]; then
         safe_copy_dir "$dir" "$TEMP_DIR/output/"
@@ -190,14 +190,16 @@ echo "Creating summary..."
 
 # 9. Create archive
 echo "Creating archive..."
-cd /tmp
+ARCHIVE_DIR="${HOME}/.digest-temp"
+mkdir -p "$ARCHIVE_DIR"
+cd "$ARCHIVE_DIR"
 tar -czf "${ARCHIVE_NAME}.tar.gz" "$ARCHIVE_NAME"
 
 # 10. Cleanup
 rm -rf "$TEMP_DIR"
 
 # 11. Show results
-ARCHIVE_PATH="/tmp/${ARCHIVE_NAME}.tar.gz"
+ARCHIVE_PATH="${ARCHIVE_DIR}/${ARCHIVE_NAME}.tar.gz"
 ARCHIVE_SIZE=$(du -h "$ARCHIVE_PATH" | cut -f1)
 
 echo ""

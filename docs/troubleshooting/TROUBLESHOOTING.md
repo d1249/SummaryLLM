@@ -198,7 +198,75 @@ curl http://localhost:9109/readyz
 - Monitor LLM Gateway response times
 - Consider increasing timeouts in config
 
-### 9. Getting Help
+### 9. Permission Issues
+
+#### Error: "Permission denied" when creating directories
+
+**Cause**: Insufficient permissions to create directories in system locations like `/tmp/` or `/opt/`.
+
+**Solution**:
+```bash
+# Use home directory instead of system directories
+export OUT_DIR="$HOME/.digest-out"
+export STATE_DIR="$HOME/.digest-state"
+
+# Or run with custom paths
+./scripts/test_run.sh
+```
+
+#### Error: "Cannot access /etc/ssl/corp-ca.pem"
+
+**Cause**: No read permissions for system CA certificate.
+
+**Solution**:
+```bash
+# Copy CA certificate to home directory
+mkdir -p ~/.ssl
+cp /etc/ssl/corp-ca.pem ~/.ssl/corp-ca.pem
+
+# Or place in project directory
+mkdir -p ./certs
+cp /etc/ssl/corp-ca.pem ./certs/corp-ca.pem
+```
+
+#### Error: "Cannot write to /tmp/"
+
+**Cause**: `/tmp/` directory is not writable or has restrictions.
+
+**Solution**:
+```bash
+# Use home directory for temporary files
+export TMPDIR="$HOME/.digest-temp"
+mkdir -p "$TMPDIR"
+
+# Or use project directory
+export TMPDIR="./temp"
+mkdir -p "$TMPDIR"
+```
+
+#### Corporate laptop restrictions
+
+**Common issues on corporate laptops**:
+- No write access to `/tmp/`
+- No read access to `/etc/ssl/`
+- No access to `/opt/`
+- Restricted environment variables
+
+**Workaround**:
+```bash
+# Set all paths to home directory
+export OUT_DIR="$HOME/.digest-out"
+export STATE_DIR="$HOME/.digest-state"
+export TMPDIR="$HOME/.digest-temp"
+
+# Create directories
+mkdir -p "$OUT_DIR" "$STATE_DIR" "$TMPDIR"
+
+# Run with home directory paths
+./scripts/test_run.sh
+```
+
+### 10. Getting Help
 
 #### Environment diagnostics
 

@@ -6,8 +6,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 
 # Default paths
-OUT_DIR="${OUT_DIR:-/tmp/digest-out}"
-STATE_DIR="${STATE_DIR:-/tmp/digest-state}"
+OUT_DIR="${OUT_DIR:-${HOME}/.digest-out}"
+STATE_DIR="${STATE_DIR:-${HOME}/.digest-state}"
 
 # Create directories if they don't exist
 mkdir -p "$OUT_DIR" "$STATE_DIR"

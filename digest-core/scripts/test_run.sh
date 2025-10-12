@@ -86,10 +86,11 @@ echo "Starting test run..."
 # Set log level
 export DIGEST_LOG_LEVEL="$LOG_LEVEL"
 
-# Run the digest
+# Run the digest (ensure src on PYTHONPATH if not installed)
+export PYTHONPATH="${PROJECT_ROOT}/src:${PYTHONPATH:-}"
 if [ "$DRY_RUN" = "true" ]; then
     echo "Running in dry-run mode (no LLM calls)..."
-    python3 -m digest_core.cli run \
+python3 -m digest_core.cli run \
         --dry-run \
         --out "$OUT_DIR" \
         --state "$STATE_DIR" \

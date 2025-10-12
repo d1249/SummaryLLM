@@ -18,7 +18,9 @@ echo "State directory: $STATE_DIR"
 
 cd "$PROJECT_ROOT"
 
-# Run the digest
+# Run the digest (ensure src on PYTHONPATH if not installed)
+export PYTHONPATH="${PROJECT_ROOT}/src:${PYTHONPATH:-}"
+
 python3 -m digest_core.cli run \
     --out "$OUT_DIR" \
     --state "$STATE_DIR" \

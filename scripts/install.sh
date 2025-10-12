@@ -532,12 +532,12 @@ show_next_steps() {
     echo
     echo "3. Run your first digest:"
     echo "   cd digest-core"
-    echo "   # Test run (without LLM)"
-    if [[ -n "$PYTHON_BIN" ]]; then
-        echo "   \"$PYTHON_BIN\" -m digest_core.cli run --dry-run"
-    else
-        echo "   python -m digest_core.cli run --dry-run"
-    fi
+    echo "   # Test run (prefer uv, fallback to PYTHONPATH)"
+    echo "   if command -v uv >/dev/null 2>&1; then"
+    echo "     uv run python -m digest_core.cli run --dry-run"
+    echo "   else"
+    echo "     PYTHONPATH=./src ${PYTHON_BIN:-python3} -m digest_core.cli run --dry-run"
+    echo "   fi"
     echo
     echo "4. For full documentation, see:"
     echo "   - README.md (quick start)"

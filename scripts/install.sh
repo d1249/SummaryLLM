@@ -453,9 +453,17 @@ run_setup() {
         return
     fi
     
-    if [[ -f "./setup.sh" ]]; then
+    if [[ -f "./scripts/setup.sh" ]]; then
+        print_info "Running interactive setup wizard..."
+        chmod +x ./scripts/setup.sh
+        # Change to the cloned directory before running setup
+        cd "$INSTALL_DIR"
+        ./scripts/setup.sh
+    elif [[ -f "./setup.sh" ]]; then
         print_info "Running interactive setup wizard..."
         chmod +x ./setup.sh
+        # Change to the cloned directory before running setup
+        cd "$INSTALL_DIR"
         ./setup.sh
     else
         print_error "setup.sh not found in repository"

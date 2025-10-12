@@ -16,9 +16,10 @@ NC='\033[0m' # No Color
 
 # Configuration variables
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$SCRIPT_DIR"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 DIGEST_CORE_DIR="$PROJECT_ROOT/digest-core"
 TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
+VERBOSE="${VERBOSE:-false}"
 
 # Collected configuration (using individual variables instead of associative array for compatibility)
 EWS_ENDPOINT=""
@@ -577,6 +578,13 @@ show_summary() {
 
 # Main function
 main() {
+    # Debug information
+    echo "DEBUG: SCRIPT_DIR=$SCRIPT_DIR"
+    echo "DEBUG: PROJECT_ROOT=$PROJECT_ROOT"
+    echo "DEBUG: DIGEST_CORE_DIR=$DIGEST_CORE_DIR"
+    echo "DEBUG: Current directory: $(pwd)"
+    echo "DEBUG: digest-core exists: $([[ -d "$DIGEST_CORE_DIR" ]] && echo "YES" || echo "NO")"
+    
     # Welcome message
     echo
     print_header "🚀 SummaryLLM Interactive Setup"
@@ -584,8 +592,18 @@ main() {
     echo
     
     # Check if running in correct directory
+    if [[ "$VERBOSE" == "true" ]]; then
+        echo "DEBUG: SCRIPT_DIR=$SCRIPT_DIR"
+        echo "DEBUG: PROJECT_ROOT=$PROJECT_ROOT"
+        echo "DEBUG: DIGEST_CORE_DIR=$DIGEST_CORE_DIR"
+        echo "DEBUG: Current directory: $(pwd)"
+        echo "DEBUG: digest-core exists: $([[ -d "$DIGEST_CORE_DIR" ]] && echo "YES" || echo "NO")"
+    fi
+    
     if [[ ! -d "$DIGEST_CORE_DIR" ]]; then
         print_error "digest-core directory not found. Please run this script from the SummaryLLM root directory."
+        print_error "Expected: $DIGEST_CORE_DIR"
+        print_error "Current directory: $(pwd)"
         exit 1
     fi
     

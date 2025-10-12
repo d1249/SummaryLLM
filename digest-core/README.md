@@ -421,10 +421,15 @@ To force rebuild, delete existing artifacts or use `--force` flag.
 
 ## Documentation Links
 
-- **[DEPLOYMENT.md](../DEPLOYMENT.md)** - Docker setup, dedicated machine configuration, infrastructure requirements
-- **[AUTOMATION.md](../AUTOMATION.md)** - Scheduling with systemd/cron, state management, advanced automation  
-- **[MONITORING.md](../MONITORING.md)** - Prometheus metrics, health checks, logging, observability
-- **[TROUBLESHOOTING.md](TROUBLESHOOTING.md)** - Common issues and solutions
+- **[📚 Full Documentation](../docs/README.md)** - Complete documentation navigation
+- **[🚀 Quick Start](../docs/installation/QUICK_START.md)** - Get started in 5 minutes
+- **[🔧 Installation Guide](../docs/installation/INSTALL.md)** - Detailed installation instructions
+- **[🐳 Deployment](../docs/operations/DEPLOYMENT.md)** - Docker setup, dedicated machine configuration
+- **[⏰ Automation](../docs/operations/AUTOMATION.md)** - Scheduling with systemd/cron, state management
+- **[📊 Monitoring](../docs/operations/MONITORING.md)** - Prometheus metrics, health checks, observability
+- **[🚨 Troubleshooting](../docs/troubleshooting/TROUBLESHOOTING.md)** - Common issues and solutions
+- **[🏗️ Architecture](../docs/development/ARCHITECTURE.md)** - System architecture and components
+- **[📖 Technical Details](../docs/development/TECHNICAL.md)** - Technical specifications and configuration
 
 ## License
 

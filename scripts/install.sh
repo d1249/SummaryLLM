@@ -516,12 +516,17 @@ install_python_deps() {
         
         # Установить зависимости
         print_info "Установка зависимостей через pip..."
-        "$venv_path/bin/pip" install -e .
         
-        if [[ $? -eq 0 ]]; then
+        if "$venv_path/bin/pip" install -e . 2>/dev/null; then
             print_success "Зависимости установлены в venv"
+        elif "$venv_path/bin/pip" install --trusted-host pypi.org --trusted-host files.pythonhosted.org -e .; then
+            print_success "Зависимости установлены (с --trusted-host)"
         else
             print_error "Ошибка установки зависимостей"
+            print_info "Попробуйте вручную:"
+            echo "  cd digest-core"
+            echo "  source .venv/bin/activate"
+            echo "  pip install --trusted-host pypi.org --trusted-host files.pythonhosted.org -e ."
         fi
 
         cd ..

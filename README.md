@@ -83,6 +83,47 @@ cd digest-core
 .venv/bin/python -m digest_core.cli run --dry-run
 ```
 
+## Устранение проблем при установке
+
+### Ошибки TLS/SSL сертификатов
+
+Если при установке возникает ошибка `invalid peer certificate: UnknownIssuer`:
+
+```bash
+# Используйте trusted-host для обхода проблем с корпоративными сертификатами
+cd digest-core
+source .venv/bin/activate
+pip install --trusted-host pypi.org --trusted-host files.pythonhosted.org -e .
+```
+
+### Отсутствует venv
+
+Если виртуальное окружение не создано:
+
+```bash
+# Запустите скрипт диагностики
+./scripts/fix_installation.sh
+
+# Или создайте вручную
+cd digest-core
+python3.11 -m venv .venv
+source .venv/bin/activate
+pip install --upgrade pip
+pip install -e .
+```
+
+### Устаревшая конфигурация
+
+Если получаете ошибку `Cannot determine NTLM username`:
+
+```bash
+# Обновите репозиторий
+git pull
+
+# Пересоздайте конфигурацию
+./scripts/setup.sh
+```
+
 ## Основные команды
 
 ```bash

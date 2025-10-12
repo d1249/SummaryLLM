@@ -9,6 +9,7 @@ Daily corporate communications digest with privacy-first design and LLM-powered 
 - [Virtual Environment](#virtual-environment)
 - [Quick Start](#quick-start)
 - [Manual Installation](#manual-installation)
+- [Troubleshooting Installation](#troubleshooting-installation)
 - [Configuration](#configuration)
 - [Usage](#usage)
 - [Development](#development)
@@ -131,6 +132,63 @@ For detailed deployment instructions, see:
 - **[DEPLOYMENT.md](../DEPLOYMENT.md)** - Docker setup, dedicated machine configuration, infrastructure requirements
 - **[AUTOMATION.md](../AUTOMATION.md)** - Scheduling with systemd/cron, state management, advanced automation
 - **[MONITORING.md](../MONITORING.md)** - Prometheus metrics, health checks, logging, observability
+
+## Troubleshooting Installation
+
+### TLS/SSL Certificate Errors
+
+If you encounter `invalid peer certificate: UnknownIssuer` during installation:
+
+```bash
+# Use trusted-host to bypass corporate certificate issues
+cd digest-core
+source .venv/bin/activate
+pip install --trusted-host pypi.org --trusted-host files.pythonhosted.org -e .
+```
+
+### Missing venv
+
+If the virtual environment wasn't created:
+
+```bash
+# Run the diagnostic script
+../scripts/fix_installation.sh
+
+# Or create manually
+python3.11 -m venv .venv
+source .venv/bin/activate
+pip install --upgrade pip
+pip install -e .
+```
+
+### Outdated Configuration
+
+If you get `Cannot determine NTLM username` error:
+
+```bash
+# Update repository
+cd ..
+git pull
+
+# Recreate configuration
+./scripts/setup.sh
+```
+
+### Manual Dependency Installation
+
+If all else fails:
+
+```bash
+# Navigate to digest-core
+cd digest-core
+
+# Activate venv
+source .venv/bin/activate
+
+# Install with corporate certificate workaround
+pip install --trusted-host pypi.org --trusted-host files.pythonhosted.org --upgrade pip
+pip install --trusted-host pypi.org --trusted-host files.pythonhosted.org -e .
+```
 
 ## Configuration
 

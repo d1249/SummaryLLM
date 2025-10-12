@@ -766,12 +766,18 @@ show_summary() {
         
         # Установить зависимости в venv
         print_info "Установка зависимостей через pip..."
-        "$venv_path/bin/pip" install -e .
         
-        if [[ $? -eq 0 ]]; then
+        # Попытка 1: стандартная установка
+        if "$venv_path/bin/pip" install -e . 2>/dev/null; then
             print_success "Зависимости установлены успешно"
+        elif "$venv_path/bin/pip" install --trusted-host pypi.org --trusted-host files.pythonhosted.org -e .; then
+            print_success "Зависимости установлены (с --trusted-host для корпоративных сертификатов)"
         else
             print_error "Ошибка установки зависимостей"
+            print_info "Попробуйте вручную с корпоративными сертификатами:"
+            echo "  cd $DIGEST_CORE_DIR"
+            echo "  source .venv/bin/activate"
+            echo "  pip install --trusted-host pypi.org --trusted-host files.pythonhosted.org -e ."
         fi
     fi
     

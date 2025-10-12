@@ -2,6 +2,20 @@
 
 Daily corporate communications digest with privacy-first design and LLM-powered action extraction.
 
+## Table of Contents
+
+- [Features](#features)
+- [Requirements](#requirements)
+- [Quick Start](#quick-start)
+- [Manual Installation](#manual-installation)
+- [Configuration](#configuration)
+- [Usage](#usage)
+- [Development](#development)
+- [Architecture](#architecture)
+- [Idempotency](#idempotency)
+- [Privacy & Security](#privacy--security)
+- [Documentation Links](#documentation-links)
+
 ## Features
 
 - **EWS Integration**: NTLM authentication, corporate CA trust, incremental sync
@@ -31,6 +45,32 @@ make setup-wizard
 
 This will guide you through all configuration steps and generate the necessary files.
 
+### After Setup
+
+1. **Activate environment**:
+   ```bash
+   source ../.env
+   ```
+
+2. **Install dependencies**:
+   ```bash
+   make setup
+   ```
+
+3. **Check configuration**:
+   ```bash
+   make env-check
+   ```
+
+4. **Run first digest**:
+   ```bash
+   # Test run (without LLM)
+   python -m digest_core.cli run --dry-run
+   
+   # Full run for today
+   python -m digest_core.cli run
+   ```
+
 ## Manual Installation
 
 ```bash
@@ -44,109 +84,12 @@ uv sync
 make setup
 ```
 
-## Infrastructure
+## Deployment & Infrastructure
 
-### Dedicated Machine Setup
-
-For deployment on a dedicated machine with EWS access:
-
-1. **Prerequisites**:
-   - Docker/Podman installed
-   - Access to EWS endpoint
-   - Corporate CA certificate at `/etc/ssl/corp-ca.pem`
-   - Directories `/opt/digest/out` and `/opt/digest/.state` (UID 1001)
-
-2. **Build and Run**:
-   ```bash
-   # Build Docker image
-   make docker
-   
-   # Run container with proper mounts
-   docker run -d \
-     --name digest-core \
-     -e EWS_PASSWORD='your_password' \
-     -e LLM_TOKEN='your_token' \
-     -v /etc/ssl/corp-ca.pem:/etc/ssl/corp-ca.pem:ro \
-     -v /opt/digest/out:/data/out \
-     -v /opt/digest/.state:/data/.state \
-     -p 9108:9108 \
-     -p 9109:9109 \
-     digest-core:latest
-   ```
-
-3. **Manual Run**:
-   ```bash
-   docker run -it \
-     -e EWS_PASSWORD='your_password' \
-     -e LLM_TOKEN='your_token' \
-     -v /etc/ssl/corp-ca.pem:/etc/ssl/corp-ca.pem:ro \
-     -v /opt/digest/out:/data/out \
-     -v /opt/digest/.state:/data/.state \
-     -p 9108:9108 \
-     -p 9109:9109 \
-     digest-core:latest python -m digest_core.cli run
-   ```
-
-### Scheduling
-
-#### systemd Timer
-Create `/etc/systemd/system/digest-core.service`:
-```ini
-[Unit]
-Description=Digest Core Service
-After=network.target
-
-[Service]
-Type=oneshot
-ExecStart=/usr/bin/docker run --rm \
-  -e EWS_PASSWORD=%i \
-  -e LLM_TOKEN=%i \
-  -v /etc/ssl/corp-ca.pem:/etc/ssl/corp-ca.pem:ro \
-  -v /opt/digest/out:/data/out \
-  -v /opt/digest/.state:/data/.state \
-  digest-core:latest
-User=digest
-Group=digest
-EnvironmentFile=/etc/digest-core.env
-```
-
-Create `/etc/systemd/system/digest-core.timer`:
-```ini
-[Unit]
-Description=Run digest-core daily
-Requires=digest-core.service
-
-[Timer]
-OnCalendar=daily
-Persistent=true
-
-[Install]
-WantedBy=timers.target
-```
-
-Enable and start:
-```bash
-sudo systemctl enable digest-core.timer
-sudo systemctl start digest-core.timer
-```
-
-#### Cron
-Add to crontab:
-```bash
-# Run daily at 07:30
-30 7 * * * /usr/bin/docker run --rm -e EWS_PASSWORD='password' -e LLM_TOKEN='token' -v /etc/ssl/corp-ca.pem:/etc/ssl/corp-ca.pem:ro -v /opt/digest/out:/data/out -v /opt/digest/.state:/data/.state digest-core:latest
-```
-
-### Rotation
-
-Run weekly cleanup:
-```bash
-# Rotate state and artifacts
-./scripts/rotate_state.sh
-
-# Or using make
-make rotate
-```
+For detailed deployment instructions, see:
+- **[DEPLOYMENT.md](../DEPLOYMENT.md)** - Docker setup, dedicated machine configuration, infrastructure requirements
+- **[AUTOMATION.md](../AUTOMATION.md)** - Scheduling with systemd/cron, state management, advanced automation
+- **[MONITORING.md](../MONITORING.md)** - Prometheus metrics, health checks, logging, observability
 
 ## Configuration
 
@@ -401,60 +344,12 @@ python -m digest_core.cli run --verbose
 - Ensure proper headers in config
 - Test with different model
 
-### Docker
-
-```bash
-# Build image
-make docker
-
-# Run container
-docker run --rm \
-  -e EWS_PASSWORD=$EWS_PASSWORD \
-  -e LLM_TOKEN=$LLM_TOKEN \
-  -v $(pwd)/out:/data/out \
-  -p 9108:9108 \
-  -p 9109:9109 \
-  digest-core:latest
-```
 
 ## Observability
 
-### Metrics
+For detailed monitoring and observability setup, see **[MONITORING.md](../MONITORING.md)**.
 
-Prometheus metrics available at `http://localhost:9108/metrics`:
-
-- `llm_latency_ms`: LLM request latency histogram
-- `llm_tokens_in_total`, `llm_tokens_out_total`: Token usage counters
-- `emails_total{status}`: Email processing by status
-- `digest_build_seconds`: Total digest build time
-- `runs_total{status}`: Run status (ok/retry/failed)
-
-**Cardinality Limits**: Metrics use controlled label sets to prevent high cardinality. Only essential labels are included (model, operation, status).
-
-### Health Checks
-
-- Health: `http://localhost:9109/healthz`
-- Readiness: `http://localhost:9109/readyz`
-
-### Logs
-
-Structured JSON logs via `structlog` with automatic PII redaction:
-
-```json
-{
-  "event": "Digest run started",
-  "timestamp": "2024-01-15T10:30:00.123456Z",
-  "level": "info",
-  "trace_id": "abc123-def456",
-  "digest_date": "2024-01-15"
-}
-```
-
-**PII Policy**: All PII masking logic (emails, phone numbers, names, SSNs, credit cards, IP addresses) is handled by the LLM Gateway API. No local masking is performed. Message bodies are never logged.
-
-### Diagnostics
-
-Check environment and connectivity:
+Quick diagnostics:
 ```bash
 # Run diagnostics
 ./scripts/print_env.sh
@@ -462,11 +357,6 @@ Check environment and connectivity:
 # Or using make
 make env-check
 ```
-
-For empty days, check:
-- Time window settings (calendar_day vs rolling_24h)
-- Watermark state in `.state` directory
-- EWS connectivity and credentials
 
 ## Troubleshooting
 
@@ -528,6 +418,13 @@ To force rebuild, delete existing artifacts or use `--force` flag.
 - **Corporate CA**: TLS verification with custom CA
 - **Non-root Container**: Docker runs as UID 1001
 - **Secret Management**: Credentials via ENV only
+
+## Documentation Links
+
+- **[DEPLOYMENT.md](../DEPLOYMENT.md)** - Docker setup, dedicated machine configuration, infrastructure requirements
+- **[AUTOMATION.md](../AUTOMATION.md)** - Scheduling with systemd/cron, state management, advanced automation  
+- **[MONITORING.md](../MONITORING.md)** - Prometheus metrics, health checks, logging, observability
+- **[TROUBLESHOOTING.md](TROUBLESHOOTING.md)** - Common issues and solutions
 
 ## License
 

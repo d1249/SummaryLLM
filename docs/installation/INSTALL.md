@@ -9,7 +9,7 @@
 **Скрипт:** `install.sh`
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/d1249/SummaryLLM/main/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/d1249/SummaryLLM/main/scripts/install_interactive.sh | bash
 ```
 
 **Что делает:**
@@ -22,22 +22,22 @@ curl -fsSL https://raw.githubusercontent.com/d1249/SummaryLLM/main/scripts/insta
 **Опции:**
 ```bash
 # Установка в кастомную директорию
-curl -fsSL https://raw.githubusercontent.com/d1249/SummaryLLM/main/scripts/install.sh | bash -s -- --install-dir /opt/summaryllm
+curl -fsSL https://raw.githubusercontent.com/d1249/SummaryLLM/main/scripts/install_interactive.sh | bash -s -- --install-dir /opt/summaryllm
 
 # Пропустить установку зависимостей
-curl -fsSL https://raw.githubusercontent.com/d1249/SummaryLLM/main/scripts/install.sh | bash -s -- --skip-deps
+curl -fsSL https://raw.githubusercontent.com/d1249/SummaryLLM/main/scripts/install_interactive.sh | bash -s -- --skip-deps
 
 # Пропустить интерактивную настройку
-curl -fsSL https://raw.githubusercontent.com/d1249/SummaryLLM/main/scripts/install.sh | bash -s -- --skip-setup
+curl -fsSL https://raw.githubusercontent.com/d1249/SummaryLLM/main/scripts/install_interactive.sh | bash -s -- --skip-setup
 
 # Подробный вывод
-curl -fsSL https://raw.githubusercontent.com/d1249/SummaryLLM/main/scripts/install.sh | bash -s -- --verbose
+curl -fsSL https://raw.githubusercontent.com/d1249/SummaryLLM/main/scripts/install_interactive.sh | bash -s -- --verbose
 
 # Автоустановка зависимостей через Homebrew (без вопросов)
-curl -fsSL https://raw.githubusercontent.com/d1249/SummaryLLM/main/scripts/install.sh | bash -s -- --auto-brew --add-path
+curl -fsSL https://raw.githubusercontent.com/d1249/SummaryLLM/main/scripts/install_interactive.sh | bash -s -- --auto-brew --add-path
 
 # Неинтерактивный режим с автофлагами
-curl -fsSL https://raw.githubusercontent.com/d1249/SummaryLLM/main/scripts/install.sh | bash -s -- --non-interactive --auto-brew
+curl -fsSL https://raw.githubusercontent.com/d1249/SummaryLLM/main/scripts/install_interactive.sh | bash -s -- --non-interactive --auto-brew
 ```
 
 ### 2. Быстрая установка
@@ -163,7 +163,7 @@ export PATH="$(brew --prefix)/opt/python@3.11/bin:$PATH"
 echo 'export PATH="$(brew --prefix)/opt/python@3.11/bin:$PATH"' >> ~/.zshrc && exec zsh -l
 
 # Без смены системного python3: запускайте явно
-PATH="$(brew --prefix)/opt/python@3.11/bin:$PATH" scripts/install.sh --auto-brew --add-path
+PATH="$(brew --prefix)/opt/python@3.11/bin:$PATH" scripts/install_interactive.sh --auto-brew --add-path
 ```
 
 ### Проблемы с правами доступа

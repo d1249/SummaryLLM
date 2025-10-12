@@ -7,14 +7,14 @@
 ### Автоматическая установка (рекомендуется)
 
 ```bash
-# Полная установка с интерактивной настройкой
-curl -fsSL https://raw.githubusercontent.com/d1249/SummaryLLM/main/scripts/install.sh | bash
+# Полная установка с интерактивной настройкой (рекомендуется)
+curl -fsSL https://raw.githubusercontent.com/d1249/SummaryLLM/main/scripts/install_interactive.sh | bash
 
 # Быстрая установка без интерактивной настройки
 curl -fsSL https://raw.githubusercontent.com/d1249/SummaryLLM/main/scripts/quick-install.sh | bash
 
 # С опциями (полная установка)
-curl -fsSL https://raw.githubusercontent.com/d1249/SummaryLLM/main/scripts/install.sh | bash -s -- --install-dir /opt/summaryllm
+curl -fsSL https://raw.githubusercontent.com/d1249/SummaryLLM/main/scripts/install_interactive.sh | bash -s -- --install-dir /opt/summaryllm
 ```
 
 #### macOS (Homebrew) — быстрый старт
@@ -25,7 +25,7 @@ brew update
 brew install python@3.11 uv docker openssl curl git
 
 # Временный PATH для одной команды
-PATH="$(brew --prefix)/opt/python@3.11/bin:$PATH" scripts/install.sh --auto-brew --add-path
+PATH="$(brew --prefix)/opt/python@3.11/bin:$PATH" scripts/install_interactive.sh --auto-brew --add-path
 
 # Явный запуск CLI через 3.11
 cd digest-core

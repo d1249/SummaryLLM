@@ -1,5 +1,5 @@
 #!/bin/bash
-set -euo pipefail
+set -eo pipefail
 
 # SummaryLLM One-Command Installer
 # Usage: curl -fsSL https://raw.githubusercontent.com/d1249/SummaryLLM/main/scripts/install.sh | bash
@@ -458,13 +458,23 @@ run_setup() {
         chmod +x ./scripts/setup.sh
         # Change to the cloned directory before running setup
         cd "$INSTALL_DIR"
-        ./scripts/setup.sh
+        # Pass found Python binary to setup.sh
+        if [[ -n "$PYTHON_BIN" ]]; then
+            PYTHON_BIN="$PYTHON_BIN" ./scripts/setup.sh
+        else
+            ./scripts/setup.sh
+        fi
     elif [[ -f "./setup.sh" ]]; then
         print_info "Running interactive setup wizard..."
         chmod +x ./setup.sh
         # Change to the cloned directory before running setup
         cd "$INSTALL_DIR"
-        ./setup.sh
+        # Pass found Python binary to setup.sh
+        if [[ -n "$PYTHON_BIN" ]]; then
+            PYTHON_BIN="$PYTHON_BIN" ./setup.sh
+        else
+            ./setup.sh
+        fi
     else
         print_error "setup.sh not found in repository"
         exit 1

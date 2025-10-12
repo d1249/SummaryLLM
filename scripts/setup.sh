@@ -21,6 +21,13 @@ DIGEST_CORE_DIR="$PROJECT_ROOT/digest-core"
 TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
 VERBOSE="${VERBOSE:-false}"
 
+# Use Python binary passed from install.sh if available
+if [[ -n "${PYTHON_BIN:-}" ]]; then
+    FOUND_PYTHON="$PYTHON_BIN"
+else
+    FOUND_PYTHON=""
+fi
+
 # Collected configuration (using individual variables instead of associative array for compatibility)
 EWS_ENDPOINT=""
 EWS_USER_UPN=""
@@ -198,8 +205,19 @@ check_dependencies() {
     
     local missing_tools=()
     
-    # Check Python
-    if check_tool "python3"; then
+    # Check Python - use passed Python binary if available
+    if [[ -n "$FOUND_PYTHON" ]]; then
+        local python_version=$("$FOUND_PYTHON" --version | cut -d' ' -f2)
+        print_success "Python $python_version found at $FOUND_PYTHON"
+        
+        # Check if Python version is 3.11+
+        local major=$(echo "$python_version" | cut -d'.' -f1)
+        local minor=$(echo "$python_version" | cut -d'.' -f2)
+        if [[ $major -lt 3 ]] || [[ $major -eq 3 && $minor -lt 11 ]]; then
+            print_error "Python 3.11+ required, found $python_version"
+            missing_tools+=("python3")
+        fi
+    elif check_tool "python3"; then
         local python_version=$(python3 --version | cut -d' ' -f2)
         print_success "Python $python_version found"
         

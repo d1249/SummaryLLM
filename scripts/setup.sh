@@ -578,13 +578,6 @@ show_summary() {
 
 # Main function
 main() {
-    # Debug information
-    echo "DEBUG: SCRIPT_DIR=$SCRIPT_DIR"
-    echo "DEBUG: PROJECT_ROOT=$PROJECT_ROOT"
-    echo "DEBUG: DIGEST_CORE_DIR=$DIGEST_CORE_DIR"
-    echo "DEBUG: Current directory: $(pwd)"
-    echo "DEBUG: digest-core exists: $([[ -d "$DIGEST_CORE_DIR" ]] && echo "YES" || echo "NO")"
-    
     # Welcome message
     echo
     print_header "🚀 SummaryLLM Interactive Setup"

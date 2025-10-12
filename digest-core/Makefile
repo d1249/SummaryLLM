@@ -1,7 +1,11 @@
-.PHONY: setup test lint run docker clean package ci scripts
+.PHONY: setup setup-wizard test lint run docker clean package ci scripts
 
 setup:
 	uv sync
+
+setup-wizard:
+	@echo "Running SummaryLLM Interactive Setup..."
+	@cd .. && ./setup.sh
 
 test:
 	./scripts/test.sh

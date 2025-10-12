@@ -15,8 +15,8 @@ ews:
 
 llm:
   endpoint: "https://llm-gw.corp.com/api/v1/chat"
-  model: "corp/gpt-4o-mini"
-  timeout_s: 45
+  model: "Qwen/Qwen3-30B-A3B-Instruct-2507"
+  timeout_s: 60
   headers:
     Authorization: "Bearer ${LLM_TOKEN}"
   max_tokens_per_run: 30000

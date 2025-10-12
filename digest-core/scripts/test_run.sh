@@ -95,14 +95,14 @@ python3 -m digest_core.cli run \
         --out "$OUT_DIR" \
         --state "$STATE_DIR" \
         --window calendar_day \
-        --model gpt-4o-mini
+        --model "Qwen/Qwen3-30B-A3B-Instruct-2507"
 else
     echo "Running full digest generation..."
     python3 -m digest_core.cli run \
         --out "$OUT_DIR" \
         --state "$STATE_DIR" \
         --window calendar_day \
-        --model gpt-4o-mini
+        --model "Qwen/Qwen3-30B-A3B-Instruct-2507"
 fi
 
 echo ""

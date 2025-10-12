@@ -38,8 +38,8 @@ class EWSConfig(BaseModel):
 class LLMConfig(BaseModel):
     """LLM Gateway configuration."""
     endpoint: str = Field(default="", description="LLM Gateway endpoint")
-    model: str = Field(default="corp/gpt-4o-mini", description="Model identifier")
-    timeout_s: int = Field(default=45, description="Request timeout in seconds")
+    model: str = Field(default="Qwen/Qwen3-30B-A3B-Instruct-2507", description="Model identifier")
+    timeout_s: int = Field(default=60, description="Request timeout in seconds")
     headers: Dict[str, str] = Field(default_factory=dict, description="Additional headers")
     max_tokens_per_run: int = Field(default=30000, description="Max tokens per run")
     cost_limit_per_run: float = Field(default=5.0, description="Cost limit per run in USD")

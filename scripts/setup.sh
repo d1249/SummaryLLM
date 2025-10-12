@@ -396,11 +396,11 @@ collect_llm_config() {
     print_success "Token captured"
     
     # Model name
-    prompt_with_default "Model name" "corp/gpt-4o-mini" "LLM_MODEL"
+    prompt_with_default "Model name" "Qwen/Qwen3-30B-A3B-Instruct-2507" "LLM_MODEL"
     
     # Timeout
     while true; do
-        prompt_with_default "Timeout seconds" "45" "LLM_TIMEOUT"
+        prompt_with_default "Timeout seconds" "60" "LLM_TIMEOUT"
         if [[ "$LLM_TIMEOUT" =~ ^[0-9]+$ ]] && [[ "$LLM_TIMEOUT" -gt 0 ]]; then
             break
         else

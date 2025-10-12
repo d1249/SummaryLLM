@@ -13,7 +13,7 @@ def run(
     from_date: str = typer.Option("today", "--from-date", help="Date to process (YYYY-MM-DD or 'today')"),
     sources: str = typer.Option("ews", "--sources", help="Comma-separated source types (e.g., 'ews')"),
     out: str = typer.Option("./out", "--out", help="Output directory path"),
-    model: str = typer.Option("corp/gpt-4o-mini", "--model", help="LLM model identifier"),
+    model: str = typer.Option("Qwen/Qwen3-30B-A3B-Instruct-2507", "--model", help="LLM model identifier"),
     window: str = typer.Option("calendar_day", "--window", help="Time window: calendar_day or rolling_24h"),
     state: str = typer.Option(None, "--state", help="State directory path (overrides config for SyncState)"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Run ingest+normalize only, skip LLM/assemble"),

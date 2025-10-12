@@ -490,7 +490,13 @@ install_python_deps() {
 
         if command_exists "uv"; then
             print_info "Installing dependencies with uv..."
-            uv sync
+            # Try with native TLS first (for corporate networks)
+            if uv sync --native-tls; then
+                print_success "Dependencies installed with native TLS"
+            else
+                print_warning "Native TLS failed, trying standard sync..."
+                uv sync
+            fi
         elif command_exists "pip" || [[ -n "$PYTHON_BIN" ]]; then
             print_info "Installing dependencies with pip..."
             if [[ -n "$PYTHON_BIN" ]]; then

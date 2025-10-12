@@ -1,7 +1,13 @@
 .PHONY: setup setup-wizard test lint run docker clean package ci scripts
 
 setup:
-	uv sync
+	@echo "Installing dependencies with uv..."
+	@if uv sync --native-tls; then \
+		echo "✓ Dependencies installed with native TLS"; \
+	else \
+		echo "⚠ Native TLS failed, trying standard sync..."; \
+		uv sync; \
+	fi
 
 setup-wizard:
 	@echo "Running SummaryLLM Interactive Setup..."

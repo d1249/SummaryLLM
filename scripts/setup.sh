@@ -608,7 +608,20 @@ show_summary() {
     if [[ "$install_deps" =~ ^[Yy]$ ]]; then
         print_info "Installing Python dependencies..."
         cd "$DIGEST_CORE_DIR"
-        if make setup; then
+        # Try with native TLS first (for corporate networks)
+        if command_exists "uv"; then
+            print_info "Trying uv sync with native TLS..."
+            if uv sync --native-tls; then
+                print_success "Dependencies installed with native TLS"
+            else
+                print_warning "Native TLS failed, trying standard sync..."
+                if uv sync; then
+                    print_success "Dependencies installed successfully"
+                else
+                    print_error "Failed to install dependencies with uv"
+                fi
+            fi
+        elif make setup; then
             print_success "Dependencies installed successfully"
         else
             print_error "Failed to install dependencies"

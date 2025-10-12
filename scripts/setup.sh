@@ -375,6 +375,50 @@ check_dependencies() {
     fi
 }
 
+setup_venv() {
+    print_step "Настройка виртуального окружения Python"
+    
+    local venv_path="$DIGEST_CORE_DIR/.venv"
+    
+    # Проверить, существует ли уже venv
+    if [[ -d "$venv_path" ]]; then
+        print_info "Виртуальное окружение уже существует: $venv_path"
+        read -p "Пересоздать venv? [y/N]: " recreate
+        if [[ "$recreate" =~ ^[Yy]$ ]]; then
+            print_info "Удаление старого venv..."
+            rm -rf "$venv_path"
+        else
+            print_success "Используем существующее виртуальное окружение"
+            return 0
+        fi
+    fi
+    
+    # Создать venv
+    print_info "Создание виртуального окружения в $venv_path..."
+    if [[ -n "$FOUND_PYTHON" ]]; then
+        "$FOUND_PYTHON" -m venv "$venv_path"
+    else
+        python3 -m venv "$venv_path"
+    fi
+    
+    if [[ $? -eq 0 ]]; then
+        print_success "Виртуальное окружение создано"
+    else
+        print_error "Не удалось создать виртуальное окружение"
+        exit 1
+    fi
+    
+    # Обновить pip в venv
+    print_info "Обновление pip в виртуальном окружении..."
+    "$venv_path/bin/pip" install --upgrade pip setuptools wheel > /dev/null 2>&1
+    
+    if [[ $? -eq 0 ]]; then
+        print_success "Виртуальное окружение готово"
+    else
+        print_warning "Не удалось обновить pip, но venv создано"
+    fi
+}
+
 backup_configs() {
     print_step "Backing Up Existing Configuration"
     
@@ -694,49 +738,40 @@ show_summary() {
     
     echo
     print_header "Next Steps:"
-    echo "1. Source environment: source .env"
-    echo "2. Install dependencies: cd digest-core && make setup"
-    echo "3. Check configuration: cd digest-core && make env-check"
-    echo "4. Test with dry-run:"
+    echo "1. Активировать виртуальное окружение:"
+    echo "   source digest-core/.venv/bin/activate"
+    echo "2. Или использовать напрямую:"
+    echo "   digest-core/.venv/bin/python -m digest_core.cli run --dry-run"
+    echo "3. Загрузить переменные окружения:"
+    echo "   source .env"
+    echo "4. Запустить тестовый прогон:"
     echo "   cd digest-core"
-    echo "   # Prefer uv-managed run (auto-venv) if available"
-    echo "   if command -v uv >/dev/null 2>&1; then"
-    echo "     uv run python -m digest_core.cli run --dry-run"
-    echo "   else"
-    echo "     # Fallback: use system Python with src on PYTHONPATH"
-    echo "     PYTHONPATH=./src python -m digest_core.cli run --dry-run"
-    echo "   fi"
-    echo "5. Run first digest (full):"
+    echo "   .venv/bin/python -m digest_core.cli run --dry-run"
+    echo "5. Запустить полный дайджест:"
     echo "   cd digest-core"
-    echo "   if command -v uv >/dev/null 2>&1; then"
-    echo "     uv run python -m digest_core.cli run"
-    echo "   else"
-    echo "     PYTHONPATH=./src python -m digest_core.cli run"
-    echo "   fi"
+    echo "   .venv/bin/python -m digest_core.cli run"
     
     echo
-    echo -n "Would you like to install Python dependencies now? [y/N]: "
+    echo -n "Установить Python зависимости сейчас? [y/N]: "
     read install_deps
     if [[ "$install_deps" =~ ^[Yy]$ ]]; then
-        print_info "Installing Python dependencies..."
+        print_info "Установка Python зависимостей в venv..."
         cd "$DIGEST_CORE_DIR"
-        # Try with native TLS first (for corporate networks)
-        if command_exists "uv"; then
-            print_info "Trying uv sync with native TLS..."
-            if uv sync --native-tls; then
-                print_success "Dependencies installed with native TLS"
-            else
-                print_warning "Native TLS failed, trying standard sync..."
-                if uv sync; then
-                    print_success "Dependencies installed successfully"
-                else
-                    print_error "Failed to install dependencies with uv"
-                fi
-            fi
-        elif make setup; then
-            print_success "Dependencies installed successfully"
+        
+        local venv_path="$DIGEST_CORE_DIR/.venv"
+        if [[ ! -d "$venv_path" ]]; then
+            print_error "Виртуальное окружение не найдено"
+            exit 1
+        fi
+        
+        # Установить зависимости в venv
+        print_info "Установка зависимостей через pip..."
+        "$venv_path/bin/pip" install -e .
+        
+        if [[ $? -eq 0 ]]; then
+            print_success "Зависимости установлены успешно"
         else
-            print_error "Failed to install dependencies"
+            print_error "Ошибка установки зависимостей"
         fi
     fi
     
@@ -770,6 +805,7 @@ main() {
     
     # Run setup steps
     check_dependencies
+    setup_venv
     backup_configs
     collect_ews_config
     collect_llm_config

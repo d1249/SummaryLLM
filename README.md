@@ -47,19 +47,21 @@ cd digest-core && make setup-wizard
 
 ### После настройки
 
-1. **Активируйте окружение**:
+Скрипт установки автоматически создаёт виртуальное окружение в `digest-core/.venv`.
+
+1. **Активируйте виртуальное окружение**:
+   ```bash
+   source digest-core/.venv/bin/activate
+   ```
+
+2. **Загрузите переменные окружения**:
    ```bash
    source .env
    ```
 
-2. **Перейдите в директорию digest-core**:
+3. **Перейдите в директорию digest-core**:
    ```bash
    cd digest-core
-   ```
-
-3. **Установите зависимости**:
-   ```bash
-   make setup
    ```
 
 4. **Запустите первый дайджест**:
@@ -74,6 +76,13 @@ cd digest-core && make setup-wizard
    ./scripts/test_run.sh
    ```
 
+**Альтернатива**: Запуск без активации venv:
+```bash
+source .env
+cd digest-core
+.venv/bin/python -m digest_core.cli run --dry-run
+```
+
 ## Основные команды
 
 ```bash
@@ -81,13 +90,13 @@ cd digest-core && make setup-wizard
 python -m digest_core.cli run
 
 # Для конкретной даты
-python -m digest_core.cli run --from-date 2024-01-15
+python -m digest_core.cli run --from-date 2025-09-30
 
 # Dry-run режим (только ingest+normalize, без LLM)
 python -m digest_core.cli run --dry-run
 
 # Другая модель LLM
-python -m digest_core.cli run --model "gpt-4"
+python -m digest_core.cli run --model "Qwen/Qwen3-30B-A3B-Instruct-2507"
 
 # Кастомная директория вывода
 python -m digest_core.cli run --out ./my-digests

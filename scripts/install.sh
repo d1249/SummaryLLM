@@ -483,35 +483,48 @@ run_setup() {
 
 # Install Python dependencies
 install_python_deps() {
-    print_step "Installing Python Dependencies"
+    print_step "Установка Python зависимостей"
 
     if [[ -d "digest-core" ]]; then
         cd digest-core
-
-        if command_exists "uv"; then
-            print_info "Installing dependencies with uv..."
-            # Try with native TLS first (for corporate networks)
-            if uv sync --native-tls; then
-                print_success "Dependencies installed with native TLS"
-            else
-                print_warning "Native TLS failed, trying standard sync..."
-                uv sync
-            fi
-        elif command_exists "pip" || [[ -n "$PYTHON_BIN" ]]; then
-            print_info "Installing dependencies with pip..."
+        
+        local venv_path=".venv"
+        
+        # Создать venv если не существует
+        if [[ ! -d "$venv_path" ]]; then
+            print_info "Создание виртуального окружения..."
             if [[ -n "$PYTHON_BIN" ]]; then
-                "$PYTHON_BIN" -m pip install -e .
+                "$PYTHON_BIN" -m venv "$venv_path"
             else
-                pip install -e .
+                python3 -m venv "$venv_path"
             fi
+            
+            if [[ $? -ne 0 ]]; then
+                print_error "Не удалось создать виртуальное окружение"
+                cd ..
+                return 1
+            fi
+            
+            print_success "Виртуальное окружение создано"
         else
-            print_warning "Neither uv nor pip found, skipping Python dependency installation"
-            cd ..
-            return
+            print_info "Виртуальное окружение уже существует"
+        fi
+        
+        # Обновить pip
+        print_info "Обновление pip..."
+        "$venv_path/bin/pip" install --upgrade pip setuptools wheel > /dev/null 2>&1
+        
+        # Установить зависимости
+        print_info "Установка зависимостей через pip..."
+        "$venv_path/bin/pip" install -e .
+        
+        if [[ $? -eq 0 ]]; then
+            print_success "Зависимости установлены в venv"
+        else
+            print_error "Ошибка установки зависимостей"
         fi
 
         cd ..
-        print_success "Python dependencies installed"
     else
         print_error "digest-core directory not found"
         exit 1
@@ -524,27 +537,26 @@ show_next_steps() {
     
     echo
     print_header "Next Steps:"
-    echo "1. Change to installation directory:"
+    echo "1. Перейти в директорию установки:"
     echo "   cd $INSTALL_DIR"
     echo
-    echo "2. Activate environment (if not done in setup):"
+    echo "2. Активировать виртуальное окружение:"
+    echo "   source digest-core/.venv/bin/activate"
+    echo "   # или использовать напрямую: digest-core/.venv/bin/python"
+    echo
+    echo "3. Загрузить переменные окружения:"
     echo "   source .env"
     echo
-    echo "3. Run your first digest:"
+    echo "4. Запустить тестовый прогон:"
     echo "   cd digest-core"
-    echo "   # Test run (prefer uv, fallback to PYTHONPATH)"
-    echo "   if command -v uv >/dev/null 2>&1; then"
-    echo "     uv run python -m digest_core.cli run --dry-run"
-    echo "   else"
-    echo "     PYTHONPATH=./src ${PYTHON_BIN:-python3} -m digest_core.cli run --dry-run"
-    echo "   fi"
+    echo "   .venv/bin/python -m digest_core.cli run --dry-run"
     echo
-    echo "4. For full documentation, see:"
+    echo "5. Документация:"
     echo "   - README.md (quick start)"
     echo "   - digest-core/README.md (detailed docs)"
-    echo "   - DEPLOYMENT.md (deployment guide)"
-    echo "   - AUTOMATION.md (automation guide)"
-    echo "   - MONITORING.md (monitoring guide)"
+    echo "   - docs/operations/DEPLOYMENT.md (deployment guide)"
+    echo "   - docs/operations/AUTOMATION.md (automation guide)"
+    echo "   - docs/operations/MONITORING.md (monitoring guide)"
     echo
     
     print_success "SummaryLLM is ready to use! 🎉"

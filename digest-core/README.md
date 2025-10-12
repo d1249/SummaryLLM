@@ -6,6 +6,7 @@ Daily corporate communications digest with privacy-first design and LLM-powered 
 
 - [Features](#features)
 - [Requirements](#requirements)
+- [Virtual Environment](#virtual-environment)
 - [Quick Start](#quick-start)
 - [Manual Installation](#manual-installation)
 - [Configuration](#configuration)
@@ -31,6 +32,28 @@ Daily corporate communications digest with privacy-first design and LLM-powered 
 - Access to Exchange Web Services (EWS)
 - LLM Gateway endpoint
 
+## Virtual Environment
+
+The installation script automatically creates a virtual environment in `.venv/`. This provides:
+- **Isolation**: Dependencies don't conflict with system Python
+- **Consistency**: Same environment across all installations
+- **Simplicity**: No need to manage `uv` or other tools
+
+**Usage**:
+```bash
+# Activate venv (recommended)
+source .venv/bin/activate
+python -m digest_core.cli run
+
+# Or use directly without activation
+.venv/bin/python -m digest_core.cli run
+```
+
+**The `py.sh` helper script** automatically uses `.venv` if it exists:
+```bash
+scripts/py.sh -m digest_core.cli run
+```
+
 ## Quick Start
 
 The easiest way to get started is using the interactive setup script from the project root:
@@ -47,14 +70,16 @@ This will guide you through all configuration steps and generate the necessary f
 
 ### After Setup
 
-1. **Activate environment**:
+The setup script automatically creates a virtual environment in `.venv`.
+
+1. **Activate virtual environment**:
    ```bash
-   source ../.env
+   source .venv/bin/activate
    ```
 
-2. **Install dependencies**:
+2. **Load environment variables**:
    ```bash
-   make setup
+   source ../.env
    ```
 
 3. **Check configuration**:
@@ -65,22 +90,38 @@ This will guide you through all configuration steps and generate the necessary f
 4. **Run first digest**:
    ```bash
    # Test run (without LLM)
-   python3.11 -m digest_core.cli run --dry-run
+   python -m digest_core.cli run --dry-run
    
    # Full run for today
-   python3.11 -m digest_core.cli run
+   python -m digest_core.cli run
    ```
+
+**Alternative**: Run without activating venv:
+```bash
+source ../.env
+.venv/bin/python -m digest_core.cli run --dry-run
+```
 
 ## Manual Installation
 
+If you're not using the automated setup script:
+
 ```bash
-# Clone repository
 cd digest-core
 
-# Install dependencies with uv
-uv sync
+# Create virtual environment
+python3.11 -m venv .venv
 
-# Or using make
+# Activate it
+source .venv/bin/activate
+
+# Upgrade pip
+pip install --upgrade pip setuptools wheel
+
+# Install dependencies
+pip install -e .
+
+# Or use make (which will use venv if it exists)
 make setup
 ```
 

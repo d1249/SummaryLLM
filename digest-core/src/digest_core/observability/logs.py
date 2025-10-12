@@ -5,18 +5,41 @@ import structlog
 import logging
 import sys
 import uuid
+import os
+from pathlib import Path
 from typing import Any, Dict
+from datetime import datetime
 
 
-def setup_logging(log_level: str = "INFO") -> None:
+def setup_logging(log_level: str = "INFO", log_file: str = None) -> None:
     """Setup structured logging with structlog."""
     
-    # Configure standard library logging
+    # Create log directory if it doesn't exist
+    log_dir = Path.home() / ".digest-logs"
+    log_dir.mkdir(exist_ok=True)
+    
+    # Generate log file name if not provided
+    if log_file is None:
+        timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+        log_file = log_dir / f"run-{timestamp}.log"
+    else:
+        log_file = Path(log_file)
+        log_file.parent.mkdir(parents=True, exist_ok=True)
+    
+    # Configure standard library logging with both console and file output
+    handlers = [
+        logging.StreamHandler(sys.stdout),  # Console output
+        logging.FileHandler(log_file, encoding='utf-8')  # File output
+    ]
+    
     logging.basicConfig(
         format="%(message)s",
-        stream=sys.stdout,
+        handlers=handlers,
         level=getattr(logging, log_level.upper())
     )
+    
+    # Log the log file location
+    print(f"Log file: {log_file}")
     
     # Configure structlog
     structlog.configure(

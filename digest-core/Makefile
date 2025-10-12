@@ -45,6 +45,15 @@ scripts:
 smoke:
 	./scripts/smoke.sh
 
+test-run:
+	./scripts/test_run.sh
+
+diagnose:
+	python -m digest_core.cli diagnose
+
+collect-logs:
+	./scripts/collect_diagnostics.sh
+
 deploy:
 	./scripts/deploy.sh
 

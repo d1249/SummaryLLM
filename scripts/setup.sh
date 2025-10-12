@@ -1,5 +1,5 @@
 #!/bin/bash
-set -euo pipefail
+set -eo pipefail
 
 # SummaryLLM Interactive Setup Script
 # This script guides users through configuring SummaryLLM by collecting
@@ -156,11 +156,19 @@ prompt_with_default() {
     local default="$2"
     local var_name="$3"
     
+    # Ensure we're reading from terminal
+    if [[ ! -t 0 ]]; then
+        echo "Error: This script requires interactive input. Please run it directly, not through pipes." >&2
+        exit 1
+    fi
+    
     if [[ -n "$default" ]]; then
-        read -p "$prompt [$default]: " input
+        echo -n "$prompt [$default]: "
+        read input
         eval "$var_name=\"\${input:-$default}\""
     else
-        read -p "$prompt: " input
+        echo -n "$prompt: "
+        read input
         eval "$var_name=\"$input\""
     fi
 }
@@ -169,7 +177,14 @@ prompt_password() {
     local prompt="$1"
     local var_name="$2"
     
-    read -s -p "$prompt: " password
+    # Ensure we're reading from terminal
+    if [[ ! -t 0 ]]; then
+        echo "Error: This script requires interactive input. Please run it directly, not through pipes." >&2
+        exit 1
+    fi
+    
+    echo -n "$prompt: "
+    read -s password
     echo
     eval "$var_name=\"$password\""
 }
@@ -191,7 +206,14 @@ prompt_choice() {
         ((i++))
     done
     
-    read -p "Choose option [1]: " choice
+    # Ensure we're reading from terminal
+    if [[ ! -t 0 ]]; then
+        echo "Error: This script requires interactive input. Please run it directly, not through pipes." >&2
+        exit 1
+    fi
+    
+    echo -n "Choose option [1]: "
+    read choice
     choice="${choice:-1}"
     
     local options_array=($options)
@@ -249,7 +271,8 @@ check_dependencies() {
         print_warning "Missing tools: ${missing_tools[*]}"
         
         if check_tool "brew"; then
-            read -p "Would you like to install missing tools via Homebrew? [y/N]: " install_choice
+            echo -n "Would you like to install missing tools via Homebrew? [y/N]: "
+            read install_choice
             if [[ "$install_choice" =~ ^[Yy]$ ]]; then
                 for tool in "${missing_tools[@]}"; do
                     case "$tool" in
@@ -426,7 +449,8 @@ collect_observability_config() {
 collect_advanced_config() {
     print_step "Advanced Configuration (Optional)"
     
-    read -p "Would you like to configure advanced settings? [y/N]: " advanced_choice
+    echo -n "Would you like to configure advanced settings? [y/N]: "
+    read advanced_choice
     if [[ "$advanced_choice" =~ ^[Yy]$ ]]; then
         # Page size
         while true; do
@@ -579,7 +603,8 @@ show_summary() {
     echo "5. Run first digest: cd digest-core && make run"
     
     echo
-    read -p "Would you like to install Python dependencies now? [y/N]: " install_deps
+    echo -n "Would you like to install Python dependencies now? [y/N]: "
+    read install_deps
     if [[ "$install_deps" =~ ^[Yy]$ ]]; then
         print_info "Installing Python dependencies..."
         cd "$DIGEST_CORE_DIR"

@@ -63,31 +63,33 @@ make env-check
 
 ### 5. Запустите первый дайджест
 
+> **Требуется Python 3.11+**. На macOS установите `brew install python@3.11` и используйте `python3.11` явно.
+
 ```bash
 # Тестовый запуск (без LLM) - проверяет только EWS подключение
-python -m digest_core.cli run --dry-run
+python3.11 -m digest_core.cli run --dry-run
 
 # Полный запуск для сегодня
-python -m digest_core.cli run
+python3.11 -m digest_core.cli run
 ```
 
 ## Основные команды
 
 ```bash
 # Базовый запуск (дайджест за сегодня)
-python -m digest_core.cli run
+python3.11 -m digest_core.cli run
 
 # Для конкретной даты
-python -m digest_core.cli run --from-date 2024-01-15
+python3.11 -m digest_core.cli run --from-date 2024-01-15
 
 # Dry-run режим (только ingest+normalize, без LLM)
-python -m digest_core.cli run --dry-run
+python3.11 -m digest_core.cli run --dry-run
 
 # Другая модель LLM
-python -m digest_core.cli run --model "gpt-4"
+python3.11 -m digest_core.cli run --model "gpt-4"
 
 # Кастомная директория вывода
-python -m digest_core.cli run --out ./my-digests
+python3.11 -m digest_core.cli run --out ./my-digests
 
 # Используя make
 make run

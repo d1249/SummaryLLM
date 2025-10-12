@@ -27,7 +27,7 @@ Daily corporate communications digest with privacy-first design and LLM-powered 
 
 ## Requirements
 
-- Python 3.11+
+- Python 3.11+ (на macOS: `brew install python@3.11`, запуск: `python3.11 -m digest_core.cli ...`)
 - Access to Exchange Web Services (EWS)
 - LLM Gateway endpoint
 
@@ -65,10 +65,10 @@ This will guide you through all configuration steps and generate the necessary f
 4. **Run first digest**:
    ```bash
    # Test run (without LLM)
-   python -m digest_core.cli run --dry-run
+   python3.11 -m digest_core.cli run --dry-run
    
    # Full run for today
-   python -m digest_core.cli run
+   python3.11 -m digest_core.cli run
    ```
 
 ## Manual Installation
@@ -122,16 +122,16 @@ Or create `.env` file with these variables.
 
 ```bash
 # Run digest for today
-python -m digest_core.cli run
+python3.11 -m digest_core.cli run
 
 # Run for specific date
-python -m digest_core.cli run --from-date 2024-01-15
+python3.11 -m digest_core.cli run --from-date 2024-01-15
 
 # Custom output directory
-python -m digest_core.cli run --out ./my-digests
+python3.11 -m digest_core.cli run --out ./my-digests
 
 # Dry-run mode (ingest+normalize only, no LLM calls)
-python -m digest_core.cli run --dry-run
+python3.11 -m digest_core.cli run --dry-run
 
 # Using make
 make run
@@ -141,19 +141,19 @@ make run
 
 ```bash
 # Different time window (rolling 24h instead of calendar day)
-python -m digest_core.cli run --window rolling_24h
+python3.11 -m digest_core.cli run --window rolling_24h
 
 # Custom LLM model
-python -m digest_core.cli run --model "gpt-4"
+python3.11 -m digest_core.cli run --model "gpt-4"
 
 # Multiple sources (if implemented)
-python -m digest_core.cli run --sources "ews,mattermost"
+python3.11 -m digest_core.cli run --sources "ews,mattermost"
 
 # Force rebuild (ignore idempotency)
-python -m digest_core.cli run --force
+python3.11 -m digest_core.cli run --force
 
 # Verbose output
-python -m digest_core.cli run --verbose
+python3.11 -m digest_core.cli run --verbose
 ```
 
 #### Common Scenarios
@@ -161,30 +161,30 @@ python -m digest_core.cli run --verbose
 **Daily Automated Run:**
 ```bash
 # Add to crontab for daily 8 AM execution
-0 8 * * * cd /path/to/digest-core && source ../.env && python -m digest_core.cli run
+0 8 * * * cd /path/to/digest-core && source ../.env && python3.11 -m digest_core.cli run
 ```
 
 **Historical Digest Generation:**
 ```bash
 # Generate digests for the past week
 for date in $(seq -f "2024-01-%02g" 8 14); do
-    python -m digest_core.cli run --from-date $date
+    python3.11 -m digest_core.cli run --from-date $date
 done
 ```
 
 **Testing Configuration:**
 ```bash
 # Test EWS connectivity without LLM
-python -m digest_core.cli run --dry-run
+python3.11 -m digest_core.cli run --dry-run
 
 # Test with different model
-python -m digest_core.cli run --model "gpt-3.5-turbo" --dry-run
+python3.11 -m digest_core.cli run --model "gpt-3.5-turbo" --dry-run
 ```
 
 **Multiple Mailboxes (if configured):**
 ```bash
 # Process different mailboxes by updating config.yaml folders
-python -m digest_core.cli run --from-date 2024-01-15
+python3.11 -m digest_core.cli run --from-date 2024-01-15
 ```
 
 ### Output Files

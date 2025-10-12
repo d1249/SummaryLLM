@@ -27,6 +27,16 @@ SKIP_SETUP="false"
 VERBOSE="false"
 HELP="false"
 
+# New options
+AUTO_BREW="false"
+AUTO_APT="false"
+PYTHON_REQUESTED=""
+NON_INTERACTIVE="false"
+ADD_PATH="false"
+
+# Resolved python executable (>=3.11)
+PYTHON_BIN=""
+
 # Helper functions
 print_success() {
     echo -e "${GREEN}✓${NC} $1"
@@ -77,6 +87,26 @@ parse_args() {
                 VERBOSE="true"
                 shift
                 ;;
+            --auto-brew|-y)
+                AUTO_BREW="true"
+                shift
+                ;;
+            --auto-apt)
+                AUTO_APT="true"
+                shift
+                ;;
+            --python)
+                PYTHON_REQUESTED="$2"
+                shift 2
+                ;;
+            --non-interactive)
+                NON_INTERACTIVE="true"
+                shift
+                ;;
+            --add-path)
+                ADD_PATH="true"
+                shift
+                ;;
             --help|-h)
                 HELP="true"
                 shift
@@ -103,6 +133,11 @@ OPTIONS:
     --skip-deps          Skip dependency installation
     --skip-setup         Skip interactive setup wizard
     --verbose, -v        Verbose output
+    --auto-brew, -y      Auto-install missing deps via Homebrew (no prompts)
+    --auto-apt           Auto-install missing deps via apt (no prompts)
+    --python VER         Prefer Python version (e.g. 3.11 or 3.12)
+    --non-interactive    Disable prompts; use auto flags or fail with instructions
+    --add-path           Append Homebrew Python bin dir to ~/.zshrc
     --help, -h           Show this help
 
 EXAMPLES:
@@ -112,8 +147,8 @@ EXAMPLES:
     # Install to custom directory
     curl -fsSL https://raw.githubusercontent.com/d1249/SummaryLLM/main/scripts/install.sh | bash -s -- --install-dir /opt/summaryllm
     
-    # Skip dependency installation (if already installed)
-    curl -fsSL https://raw.githubusercontent.com/d1249/SummaryLLM/main/scripts/install.sh | bash -s -- --skip-deps
+    # Auto-install missing deps via Homebrew and add PATH for python@3.11
+    PATH="\$(brew --prefix)/opt/python@3.11/bin:\$PATH" scripts/install.sh --auto-brew --add-path
 
 WHAT THIS SCRIPT DOES:
     1. Clones SummaryLLM repository
@@ -135,12 +170,85 @@ command_exists() {
     command -v "$1" >/dev/null 2>&1
 }
 
+# Find Python 3.11+ executable
+find_python() {
+    local requested="$1"
+    local candidates=()
+
+    # Respect explicit request first
+    if [[ -n "$requested" ]]; then
+        candidates+=("python${requested}" "python${requested%.*}")
+    fi
+
+    # Common binaries
+    candidates+=("python3.12" "python3.11" "python3")
+
+    # Homebrew direct paths (even if not in PATH)
+    if command -v brew >/dev/null 2>&1; then
+        local bp
+        bp="$(brew --prefix 2>/dev/null || true)"
+        if [[ -n "$bp" ]]; then
+            candidates+=("$bp/opt/python@3.12/bin/python3.12")
+            candidates+=("$bp/opt/python@3.11/bin/python3.11")
+        fi
+    fi
+
+    for bin in "${candidates[@]}"; do
+        if command -v "$bin" >/dev/null 2>&1; then
+            local resolved
+            resolved="$(command -v "$bin")"
+            local v="$("$resolved" --version | awk '{print $2}')"
+            local major="${v%%.*}"
+            local minor="${v#*.}"; minor="${minor%%.*}"
+            if [[ "$major" -gt 3 || ("$major" -eq 3 && "$minor" -ge 11) ]]; then
+                echo "$resolved"
+                return 0
+            fi
+        elif [[ -x "$bin" ]]; then
+            local v="$("$bin" --version | awk '{print $2}')"
+            local major="${v%%.*}"
+            local minor="${v#*.}"; minor="${minor%%.*}"
+            if [[ "$major" -gt 3 || ("$major" -eq 3 && "$minor" -ge 11) ]]; then
+                echo "$bin"
+                return 0
+            fi
+        fi
+    done
+
+    return 1
+}
+
+# Add Homebrew python@3.11 bin to PATH in ~/.zshrc
+add_brew_python_path() {
+    # Adds Homebrew python@3.11 bin to PATH in ~/.zshrc
+    if ! command -v brew >/dev/null 2>&1; then
+        return 0
+    fi
+    local bp
+    bp="$(brew --prefix 2>/dev/null || true)"
+    if [[ -z "$bp" ]]; then
+        return 0
+    fi
+    local line='export PATH="'"$bp"'/opt/python@3.11/bin:$PATH"'
+    if [[ "$ADD_PATH" == "true" ]]; then
+        if ! grep -qs 'opt/python@3.11/bin' "$HOME/.zshrc"; then
+            echo "$line" >> "$HOME/.zshrc"
+            print_success "Added python@3.11 to PATH in ~/.zshrc"
+            print_info "Reload shell: exec zsh -l"
+        fi
+    else
+        print_info "To use python@3.11, consider adding:"
+        echo "  $line"
+        echo "  exec zsh -l"
+    fi
+}
+
 # Check dependencies
 check_dependencies() {
     print_step "Checking Dependencies"
-    
+
     local missing_tools=()
-    
+
     # Check Git
     if command_exists "git"; then
         print_success "Git found"
@@ -148,24 +256,17 @@ check_dependencies() {
         print_error "Git not found"
         missing_tools+=("git")
     fi
-    
-    # Check Python
-    if command_exists "python3"; then
-        local python_version=$(python3 --version | cut -d' ' -f2)
-        print_success "Python $python_version found"
-        
-        # Check if Python version is 3.11+
-        local major=$(echo "$python_version" | cut -d'.' -f1)
-        local minor=$(echo "$python_version" | cut -d'.' -f2)
-        if [[ $major -lt 3 ]] || [[ $major -eq 3 && $minor -lt 11 ]]; then
-            print_error "Python 3.11+ required, found $python_version"
-            missing_tools+=("python3")
-        fi
+
+    # Python >=3.11 via find_python
+    PYTHON_BIN="$(find_python "$PYTHON_REQUESTED" || true)"
+    if [[ -n "$PYTHON_BIN" ]]; then
+        local python_version="$("$PYTHON_BIN" --version | cut -d' ' -f2)"
+        print_success "Python $python_version found at $PYTHON_BIN"
     else
         print_error "Python 3.11+ not found"
         missing_tools+=("python3")
     fi
-    
+
     # Check other tools
     for tool in uv docker curl openssl; do
         if command_exists "$tool"; then
@@ -175,35 +276,72 @@ check_dependencies() {
             missing_tools+=("$tool")
         fi
     done
-    
-    # Install missing tools if not skipped
-    if [[ ${#missing_tools[@]} -gt 0 ]] && [[ "$SKIP_DEPS" != "true" ]]; then
-        echo
-        print_warning "Missing tools: ${missing_tools[*]}"
-        
-        if command_exists "brew"; then
-            read -p "Would you like to install missing tools via Homebrew? [y/N]: " install_choice
+
+    # Nothing missing
+    if [[ ${#missing_tools[@]} -eq 0 ]]; then
+        return
+    fi
+
+    if [[ "$SKIP_DEPS" == "true" ]]; then
+        print_warning "Missing tools detected but --skip-deps specified: ${missing_tools[*]}"
+        print_info "You may need to install these manually before running SummaryLLM"
+        return
+    fi
+
+    # Auto / interactive install
+    if command_exists "brew"; then
+        if [[ "$AUTO_BREW" == "true" || "$NON_INTERACTIVE" == "true" ]]; then
+            print_info "Installing missing tools via Homebrew (non-interactive)..."
+            install_dependencies "${missing_tools[@]}"
+        else
+            read -p "Install missing tools via Homebrew? [y/N]: " install_choice
             if [[ "$install_choice" =~ ^[Yy]$ ]]; then
                 install_dependencies "${missing_tools[@]}"
             else
                 print_error "Cannot proceed without required tools"
+                print_info "Manual install example (macOS):"
+                echo "  brew install python@3.11 uv docker openssl curl git"
                 exit 1
             fi
-        elif command_exists "apt-get"; then
-            read -p "Would you like to install missing tools via apt? [y/N]: " install_choice
+        fi
+    elif command_exists "apt-get"; then
+        if [[ "$AUTO_APT" == "true" || "$NON_INTERACTIVE" == "true" ]]; then
+            print_info "Installing missing tools via apt (non-interactive)..."
+            install_dependencies_apt "${missing_tools[@]}"
+        else
+            read -p "Install missing tools via apt? [y/N]: " install_choice
             if [[ "$install_choice" =~ ^[Yy]$ ]]; then
                 install_dependencies_apt "${missing_tools[@]}"
             else
                 print_error "Cannot proceed without required tools"
+                print_info "Manual install example (Ubuntu/Debian):"
+                echo "  sudo apt-get update && sudo apt-get install -y python3.11 python3.11-venv python3.11-dev docker.io docker-compose curl openssl git"
                 exit 1
             fi
-        else
-            print_error "No supported package manager found. Please install missing tools manually: ${missing_tools[*]}"
-            exit 1
         fi
-    elif [[ ${#missing_tools[@]} -gt 0 ]]; then
-        print_warning "Missing tools detected but --skip-deps specified: ${missing_tools[*]}"
-        print_info "You may need to install these manually before running SummaryLLM"
+    else
+        print_error "No supported package manager found. Please install manually: ${missing_tools[*]}"
+        exit 1
+    fi
+
+    # Re-check Python after installation
+    if [[ -z "$PYTHON_BIN" ]]; then
+        PYTHON_BIN="$(find_python "$PYTHON_REQUESTED" || true)"
+        if [[ -z "$PYTHON_BIN" ]]; then
+            # On macOS, suggest PATH for Homebrew python
+            if command_exists brew; then
+                add_brew_python_path
+                # Try again after advising PATH (user may re-run)
+            fi
+            print_error "Python 3.11+ still not available in PATH"
+            echo "Try:"
+            echo "  brew install python@3.11"
+            echo "  export PATH=\"\$(brew --prefix)/opt/python@3.11/bin:\$PATH\""
+            exit 1
+        else
+            local python_version="$("$PYTHON_BIN" --version | cut -d' ' -f2)"
+            print_success "Python $python_version found at $PYTHON_BIN"
+        fi
     fi
 }
 
@@ -328,21 +466,26 @@ run_setup() {
 # Install Python dependencies
 install_python_deps() {
     print_step "Installing Python Dependencies"
-    
+
     if [[ -d "digest-core" ]]; then
         cd digest-core
-        
+
         if command_exists "uv"; then
             print_info "Installing dependencies with uv..."
             uv sync
-        elif command_exists "pip"; then
+        elif command_exists "pip" || [[ -n "$PYTHON_BIN" ]]; then
             print_info "Installing dependencies with pip..."
-            pip install -e .
+            if [[ -n "$PYTHON_BIN" ]]; then
+                "$PYTHON_BIN" -m pip install -e .
+            else
+                pip install -e .
+            fi
         else
             print_warning "Neither uv nor pip found, skipping Python dependency installation"
+            cd ..
             return
         fi
-        
+
         cd ..
         print_success "Python dependencies installed"
     else
@@ -365,7 +508,12 @@ show_next_steps() {
     echo
     echo "3. Run your first digest:"
     echo "   cd digest-core"
-    echo "   python -m digest_core.cli run --dry-run"
+    echo "   # Test run (without LLM)"
+    if [[ -n "$PYTHON_BIN" ]]; then
+        echo "   \"$PYTHON_BIN\" -m digest_core.cli run --dry-run"
+    else
+        echo "   python -m digest_core.cli run --dry-run"
+    fi
     echo
     echo "4. For full documentation, see:"
     echo "   - README.md (quick start)"
@@ -402,6 +550,14 @@ main() {
         
         # Check dependencies
         check_dependencies
+        
+        # After check_dependencies (may have installed python@3.11)
+        if [[ -z "$PYTHON_BIN" ]]; then
+            PYTHON_BIN="$(find_python "$PYTHON_REQUESTED" || true)"
+        fi
+        if command_exists brew; then
+            add_brew_python_path
+        fi
         
         # Clone repository
         clone_repository

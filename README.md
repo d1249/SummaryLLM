@@ -17,6 +17,22 @@ curl -fsSL https://raw.githubusercontent.com/d1249/SummaryLLM/main/scripts/quick
 curl -fsSL https://raw.githubusercontent.com/d1249/SummaryLLM/main/scripts/install.sh | bash -s -- --install-dir /opt/summaryllm
 ```
 
+#### macOS (Homebrew) — быстрый старт
+
+```bash
+# Установка зависимостей
+brew update
+brew install python@3.11 uv docker openssl curl git
+
+# Временный PATH для одной команды
+PATH="$(brew --prefix)/opt/python@3.11/bin:$PATH" scripts/install.sh --auto-brew --add-path
+
+# Явный запуск CLI через 3.11
+cd digest-core
+python3.11 -m pip install -e .
+python3.11 -m digest_core.cli run --dry-run
+```
+
 ### Ручная установка
 
 Если у вас уже есть клон репозитория:

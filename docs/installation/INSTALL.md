@@ -32,6 +32,12 @@ curl -fsSL https://raw.githubusercontent.com/d1249/SummaryLLM/main/scripts/insta
 
 # Подробный вывод
 curl -fsSL https://raw.githubusercontent.com/d1249/SummaryLLM/main/scripts/install.sh | bash -s -- --verbose
+
+# Автоустановка зависимостей через Homebrew (без вопросов)
+curl -fsSL https://raw.githubusercontent.com/d1249/SummaryLLM/main/scripts/install.sh | bash -s -- --auto-brew --add-path
+
+# Неинтерактивный режим с автофлагами
+curl -fsSL https://raw.githubusercontent.com/d1249/SummaryLLM/main/scripts/install.sh | bash -s -- --non-interactive --auto-brew
 ```
 
 ### 2. Быстрая установка
@@ -141,6 +147,23 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 # Установить Docker
 # macOS: brew install --cask docker
 # Ubuntu: sudo apt-get install docker.io
+```
+
+### macOS Homebrew (рекомендуется)
+
+```bash
+# Установка всех зависимостей
+brew update
+brew install python@3.11 uv docker openssl curl git
+
+# Временный PATH
+export PATH="$(brew --prefix)/opt/python@3.11/bin:$PATH"
+
+# Постоянный PATH
+echo 'export PATH="$(brew --prefix)/opt/python@3.11/bin:$PATH"' >> ~/.zshrc && exec zsh -l
+
+# Без смены системного python3: запускайте явно
+PATH="$(brew --prefix)/opt/python@3.11/bin:$PATH" scripts/install.sh --auto-brew --add-path
 ```
 
 ### Проблемы с правами доступа

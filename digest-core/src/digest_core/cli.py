@@ -15,6 +15,7 @@ def run(
     out: str = typer.Option("./out", "--out", help="Output directory path"),
     model: str = typer.Option("corp/gpt-4o-mini", "--model", help="LLM model identifier"),
     window: str = typer.Option("calendar_day", "--window", help="Time window: calendar_day or rolling_24h"),
+    state: str = typer.Option(None, "--state", help="State directory path (overrides config for SyncState)"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Run ingest+normalize only, skip LLM/assemble"),
     collect_logs: bool = typer.Option(False, "--collect-logs", help="Automatically collect diagnostics after run"),
     log_file: str = typer.Option(None, "--log-file", help="Specify log file path"),
@@ -27,10 +28,10 @@ def run(
         
         if dry_run:
             typer.echo("Dry-run mode: ingest+normalize only")
-            run_digest_dry_run(from_date, sources.split(","), out, model, window)
+            run_digest_dry_run(from_date, sources.split(","), out, model, window, state)
             exit_code = 2  # Partial success code
         else:
-            run_digest(from_date, sources.split(","), out, model, window)
+            run_digest(from_date, sources.split(","), out, model, window, state)
             exit_code = 0  # Success
         
         # Collect diagnostics if requested

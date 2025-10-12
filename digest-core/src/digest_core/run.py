@@ -26,7 +26,7 @@ from digest_core.llm.schemas import Digest
 logger = structlog.get_logger()
 
 
-def run_digest(from_date: str, sources: List[str], out: str, model: str, window: str) -> None:
+def run_digest(from_date: str, sources: List[str], out: str, model: str, window: str, state: str | None) -> None:
     """
     Run the complete digest pipeline.
     
@@ -72,6 +72,16 @@ def run_digest(from_date: str, sources: List[str], out: str, model: str, window:
     output_dir = Path(out)
     json_path = output_dir / f"digest-{digest_date}.json"
     md_path = output_dir / f"digest-{digest_date}.md"
+
+    # Override state directory if provided (affects SyncState path)
+    if state:
+        try:
+            state_dir = Path(state)
+            state_dir.mkdir(parents=True, exist_ok=True)
+            # Only change EWS sync_state_path; other components may add their own later if needed
+            config.ews.sync_state_path = str(state_dir / Path(config.ews.sync_state_path).name)
+        except Exception:
+            pass
     
     if json_path.exists() and md_path.exists():
         # Check if artifacts are recent (within T-48h rebuild window)
@@ -158,6 +168,7 @@ def run_digest(from_date: str, sources: List[str], out: str, model: str, window:
         model_lower = (config.llm.model or "").lower()
         extract_prompt_name = "extract_actions.en.v1.j2" if "qwen" in model_lower else "extract_actions.v1.j2"
         extract_prompt = (prompts_dir / extract_prompt_name).read_text()
+        prompt_version = "extract_actions.en.v1" if "qwen" in model_lower else "extract_actions.v1"
         
         # Send to LLM and validate response
         llm_response = llm_gateway.extract_actions(
@@ -169,7 +180,7 @@ def run_digest(from_date: str, sources: List[str], out: str, model: str, window:
         # Validate response against schema
         digest_data = Digest(
             schema_version="1.0",
-            prompt_version="extract_actions.v1",
+            prompt_version=prompt_version,
             digest_date=digest_date,
             trace_id=trace_id,
             sections=llm_response.get("sections", [])
@@ -223,7 +234,7 @@ def run_digest(from_date: str, sources: List[str], out: str, model: str, window:
         raise
 
 
-def run_digest_dry_run(from_date: str, sources: List[str], out: str, model: str, window: str) -> None:
+def run_digest_dry_run(from_date: str, sources: List[str], out: str, model: str, window: str, state: str | None) -> None:
     """
     Run digest pipeline in dry-run mode (ingest+normalize only, no LLM/assemble).
     
@@ -277,6 +288,15 @@ def run_digest_dry_run(from_date: str, sources: List[str], out: str, model: str,
     try:
         # Step 1: Ingest emails from EWS
         logger.info("Starting email ingestion", stage="ingest")
+        # Override state directory if provided (affects SyncState path)
+        if state:
+            try:
+                state_dir = Path(state)
+                state_dir.mkdir(parents=True, exist_ok=True)
+                config.ews.sync_state_path = str(state_dir / Path(config.ews.sync_state_path).name)
+            except Exception:
+                pass
+
         ingest = EWSIngest(config.ews)
         messages = ingest.fetch_messages(digest_date, config.time)
         logger.info("Email ingestion completed", emails_fetched=len(messages))

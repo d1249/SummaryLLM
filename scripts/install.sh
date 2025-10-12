@@ -458,22 +458,22 @@ run_setup() {
         chmod +x ./scripts/setup.sh
         # Change to the cloned directory before running setup
         cd "$INSTALL_DIR"
-        # Pass found Python binary to setup.sh
+        # Pass found Python binary to setup.sh and ensure interactive mode
         if [[ -n "$PYTHON_BIN" ]]; then
-            PYTHON_BIN="$PYTHON_BIN" ./scripts/setup.sh
+            PYTHON_BIN="$PYTHON_BIN" ./scripts/setup.sh < /dev/tty
         else
-            ./scripts/setup.sh
+            ./scripts/setup.sh < /dev/tty
         fi
     elif [[ -f "./setup.sh" ]]; then
         print_info "Running interactive setup wizard..."
         chmod +x ./setup.sh
         # Change to the cloned directory before running setup
         cd "$INSTALL_DIR"
-        # Pass found Python binary to setup.sh
+        # Pass found Python binary to setup.sh and ensure interactive mode
         if [[ -n "$PYTHON_BIN" ]]; then
-            PYTHON_BIN="$PYTHON_BIN" ./setup.sh
+            PYTHON_BIN="$PYTHON_BIN" ./setup.sh < /dev/tty
         else
-            ./setup.sh
+            ./setup.sh < /dev/tty
         fi
     else
         print_error "setup.sh not found in repository"

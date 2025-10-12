@@ -12,10 +12,10 @@ SummaryLLM - это privacy-first система для автоматическ
 
 ```bash
 # Полная установка с настройкой
-curl -fsSL https://raw.githubusercontent.com/your-org/SummaryLLM/main/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/d1249/SummaryLLM/main/scripts/install.sh | bash
 
 # Быстрая установка
-curl -fsSL https://raw.githubusercontent.com/your-org/SummaryLLM/main/scripts/quick-install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/d1249/SummaryLLM/main/scripts/quick-install.sh | bash
 ```
 
 ### Первый запуск
@@ -159,7 +159,7 @@ EWS → normalize → thread → evidence split → context select
 
 ```bash
 # Клонировать репозиторий
-git clone https://github.com/your-org/SummaryLLM.git
+git clone https://github.com/d1249/SummaryLLM.git
 cd SummaryLLM
 
 # Установить зависимости

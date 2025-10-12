@@ -2,8 +2,8 @@
 set -euo pipefail
 
 # SummaryLLM One-Command Installer
-# Usage: curl -fsSL https://raw.githubusercontent.com/your-org/SummaryLLM/main/install.sh | bash
-# Or: curl -fsSL https://raw.githubusercontent.com/your-org/SummaryLLM/main/install.sh | bash -s -- --help
+# Usage: curl -fsSL https://raw.githubusercontent.com/d1249/SummaryLLM/main/scripts/install.sh | bash
+# Or: curl -fsSL https://raw.githubusercontent.com/d1249/SummaryLLM/main/scripts/install.sh | bash -s -- --help
 
 # Color codes for output
 RED='\033[0;31m'
@@ -15,7 +15,7 @@ CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
 # Configuration
-REPO_URL="https://github.com/your-org/SummaryLLM.git"
+REPO_URL="https://github.com/d1249/SummaryLLM.git"
 DEFAULT_INSTALL_DIR="$HOME/SummaryLLM"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
@@ -95,8 +95,8 @@ show_help() {
 SummaryLLM One-Command Installer
 
 USAGE:
-    curl -fsSL https://raw.githubusercontent.com/your-org/SummaryLLM/main/install.sh | bash
-    curl -fsSL https://raw.githubusercontent.com/your-org/SummaryLLM/main/install.sh | bash -s -- [OPTIONS]
+    curl -fsSL https://raw.githubusercontent.com/d1249/SummaryLLM/main/scripts/install.sh | bash
+    curl -fsSL https://raw.githubusercontent.com/d1249/SummaryLLM/main/scripts/install.sh | bash -s -- [OPTIONS]
 
 OPTIONS:
     --install-dir DIR     Installation directory (default: \$HOME/SummaryLLM)
@@ -107,13 +107,13 @@ OPTIONS:
 
 EXAMPLES:
     # Basic installation
-    curl -fsSL https://raw.githubusercontent.com/your-org/SummaryLLM/main/install.sh | bash
+    curl -fsSL https://raw.githubusercontent.com/d1249/SummaryLLM/main/scripts/install.sh | bash
     
     # Install to custom directory
-    curl -fsSL https://raw.githubusercontent.com/your-org/SummaryLLM/main/install.sh | bash -s -- --install-dir /opt/summaryllm
+    curl -fsSL https://raw.githubusercontent.com/d1249/SummaryLLM/main/scripts/install.sh | bash -s -- --install-dir /opt/summaryllm
     
     # Skip dependency installation (if already installed)
-    curl -fsSL https://raw.githubusercontent.com/your-org/SummaryLLM/main/install.sh | bash -s -- --skip-deps
+    curl -fsSL https://raw.githubusercontent.com/d1249/SummaryLLM/main/scripts/install.sh | bash -s -- --skip-deps
 
 WHAT THIS SCRIPT DOES:
     1. Clones SummaryLLM repository

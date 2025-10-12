@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # SummaryLLM Quick Installer (Non-Interactive)
-# Usage: curl -fsSL https://raw.githubusercontent.com/your-org/SummaryLLM/main/quick-install.sh | bash
+# Usage: curl -fsSL https://raw.githubusercontent.com/d1249/SummaryLLM/main/scripts/quick-install.sh | bash
 
 # Color codes
 GREEN='\033[0;32m'
@@ -17,7 +17,7 @@ print_header() { echo -e "${PURPLE}$1${NC}"; }
 print_step() { echo -e "\n${CYAN}=== $1 ===${NC}"; }
 
 # Configuration
-REPO_URL="https://github.com/your-org/SummaryLLM.git"
+REPO_URL="https://github.com/d1249/SummaryLLM.git"
 INSTALL_DIR="$HOME/SummaryLLM"
 
 print_header "🚀 SummaryLLM Quick Installer"

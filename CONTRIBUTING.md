@@ -14,7 +14,7 @@ Thank you for your interest in contributing to SummaryLLM! This document provide
 
 1. **Clone the repository:**
    ```bash
-   git clone https://github.com/your-org/SummaryLLM.git
+   git clone https://github.com/d1249/SummaryLLM.git
    cd SummaryLLM
    ```
 

@@ -9,7 +9,7 @@
 **Скрипт:** `install.sh`
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/your-org/SummaryLLM/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/d1249/SummaryLLM/main/scripts/install.sh | bash
 ```
 
 **Что делает:**
@@ -22,16 +22,16 @@ curl -fsSL https://raw.githubusercontent.com/your-org/SummaryLLM/main/install.sh
 **Опции:**
 ```bash
 # Установка в кастомную директорию
-curl -fsSL https://raw.githubusercontent.com/your-org/SummaryLLM/main/install.sh | bash -s -- --install-dir /opt/summaryllm
+curl -fsSL https://raw.githubusercontent.com/d1249/SummaryLLM/main/scripts/install.sh | bash -s -- --install-dir /opt/summaryllm
 
 # Пропустить установку зависимостей
-curl -fsSL https://raw.githubusercontent.com/your-org/SummaryLLM/main/install.sh | bash -s -- --skip-deps
+curl -fsSL https://raw.githubusercontent.com/d1249/SummaryLLM/main/scripts/install.sh | bash -s -- --skip-deps
 
 # Пропустить интерактивную настройку
-curl -fsSL https://raw.githubusercontent.com/your-org/SummaryLLM/main/install.sh | bash -s -- --skip-setup
+curl -fsSL https://raw.githubusercontent.com/d1249/SummaryLLM/main/scripts/install.sh | bash -s -- --skip-setup
 
 # Подробный вывод
-curl -fsSL https://raw.githubusercontent.com/your-org/SummaryLLM/main/install.sh | bash -s -- --verbose
+curl -fsSL https://raw.githubusercontent.com/d1249/SummaryLLM/main/scripts/install.sh | bash -s -- --verbose
 ```
 
 ### 2. Быстрая установка
@@ -39,7 +39,7 @@ curl -fsSL https://raw.githubusercontent.com/your-org/SummaryLLM/main/install.sh
 **Скрипт:** `quick-install.sh`
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/your-org/SummaryLLM/main/quick-install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/d1249/SummaryLLM/main/scripts/quick-install.sh | bash
 ```
 
 **Что делает:**
@@ -157,7 +157,7 @@ ls -la ~/SummaryLLM
 
 ```bash
 # Проверить доступность репозитория
-curl -I https://github.com/your-org/SummaryLLM
+curl -I https://github.com/d1249/SummaryLLM
 
 # Проверить DNS
 nslookup github.com
@@ -171,7 +171,7 @@ nslookup github.com
 
 ```bash
 # Скачать и просмотреть скрипт
-curl -fsSL https://raw.githubusercontent.com/your-org/SummaryLLM/main/install.sh > install.sh
+curl -fsSL https://raw.githubusercontent.com/d1249/SummaryLLM/main/scripts/install.sh > install.sh
 cat install.sh
 
 # Запустить после проверки
@@ -190,7 +190,7 @@ bash install.sh
 
 ```bash
 # Клонировать репозиторий
-git clone https://github.com/your-org/SummaryLLM.git
+git clone https://github.com/d1249/SummaryLLM.git
 cd SummaryLLM
 
 # Собрать Docker образ

@@ -23,6 +23,7 @@ class EWSConfig(BaseModel):
     user_domain: Optional[str] = Field(default=None, description="Domain for NTLM (e.g., corp-domain.ru)")
     password_env: str = Field(default="EWS_PASSWORD", description="Environment variable for password")
     verify_ca: Optional[str] = Field(default=None, description="Path to CA certificate")
+    verify_ssl: bool = Field(default=True, description="Enable SSL certificate verification")
     autodiscover: bool = Field(default=False, description="Enable autodiscover")
     folders: List[str] = Field(default=["Inbox"], description="Folders to process")
     lookback_hours: int = Field(default=24, description="Hours to look back")
@@ -175,11 +176,43 @@ class Config(BaseSettings):
         if 'time' in yaml_config:
             self.time = TimeConfig(**yaml_config['time'])
         if 'ews' in yaml_config:
-            self.ews = EWSConfig(**yaml_config['ews'])
+            # Обновляем существующий объект EWSConfig, а не создаем новый
+            for key, value in yaml_config['ews'].items():
+                if hasattr(self.ews, key):
+                    # Не перезаписываем значения из переменных окружения
+                    if key in ['endpoint', 'user_upn', 'user_login', 'user_domain']:
+                        # Проверяем, есть ли значение из переменной окружения
+                        env_value = self._get_env_value_for_key(key)
+                        if not env_value:  # Только если нет переменной окружения
+                            setattr(self.ews, key, value)
+                    else:
+                        setattr(self.ews, key, value)
         if 'llm' in yaml_config:
-            self.llm = LLMConfig(**yaml_config['llm'])
+            # Обновляем существующий объект LLMConfig, а не создаем новый
+            for key, value in yaml_config['llm'].items():
+                if hasattr(self.llm, key):
+                    # Не перезаписываем значения из переменных окружения
+                    if key == 'endpoint':
+                        env_value = self._get_env_value_for_key('LLM_ENDPOINT')
+                        if not env_value:  # Только если нет переменной окружения
+                            setattr(self.llm, key, value)
+                    else:
+                        setattr(self.llm, key, value)
         if 'observability' in yaml_config:
             self.observability = ObservabilityConfig(**yaml_config['observability'])
+    
+    def _get_env_value_for_key(self, key: str) -> str:
+        """Get environment variable value for a given config key."""
+        env_mapping = {
+            'endpoint': 'EWS_ENDPOINT',
+            'user_upn': 'EWS_USER_UPN',
+            'user_login': 'EWS_USER_LOGIN',
+            'user_domain': 'EWS_USER_DOMAIN',
+        }
+        env_var = env_mapping.get(key)
+        if env_var:
+            return os.getenv(env_var, '')
+        return ''
     
     def get_ews_password(self) -> str:
         """Get EWS password from environment.

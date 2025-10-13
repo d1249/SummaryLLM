@@ -95,7 +95,56 @@ else
 fi
 
 echo ""
+echo "=== Сохранение конфигурации ==="
+CONFIG_FILE="configs/config.yaml"
+if [[ -f "$CONFIG_FILE" ]]; then
+    echo "Обновление существующего конфигурационного файла..."
+    # Создаем резервную копию
+    cp "$CONFIG_FILE" "${CONFIG_FILE}.backup.$(date +%Y%m%d_%H%M%S)"
+fi
+
+# Создаем или обновляем конфигурационный файл
+cat > "$CONFIG_FILE" << EOF
+time:
+  user_timezone: "Europe/Moscow"
+  window: "calendar_day"
+
+ews:
+  endpoint: "$EWS_ENDPOINT"
+  user_upn: "$EWS_USER_UPN"
+  user_login: "$EWS_USER_LOGIN"
+  user_domain: "$EWS_USER_DOMAIN"
+  password_env: "EWS_PASSWORD"
+  verify_ca: null
+  verify_ssl: false
+  autodiscover: false
+  folders: ["Inbox"]
+  lookback_hours: 24
+  page_size: 100
+  sync_state_path: ".state/ews.syncstate"
+
+llm:
+  endpoint: "${LLM_ENDPOINT:-https://llm-gw.corp.com/api/v1/chat}"
+  model: "Qwen/Qwen3-30B-A3B-Instruct-2507"
+  timeout_s: 60
+  headers:
+    Authorization: "Bearer \${LLM_TOKEN}"
+  max_tokens_per_run: 30000
+  cost_limit_per_run: 5.0
+
+observability:
+  prometheus_port: 9108
+  log_level: "INFO"
+EOF
+
+echo "✓ Конфигурация сохранена в $CONFIG_FILE"
+
+echo ""
 echo "=== Готово! ==="
 echo "Для запуска приложения используйте:"
 echo "  cd digest-core"
+echo "  source scripts/load-config.sh  # Загрузить конфигурацию"
 echo "  python3 -m src.digest_core.cli run --dry-run"
+echo ""
+echo "Или используйте Python скрипт:"
+echo "  python3 scripts/load-config.py"

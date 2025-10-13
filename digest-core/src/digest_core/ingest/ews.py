@@ -306,8 +306,24 @@ class EWSIngest:
         # Normalize conversation ID (convert ConversationId object to string)
         conversation_id = getattr(msg, 'conversation_id', None)
         if conversation_id:
-            # ConversationId is an object, convert to string first
-            conversation_id = str(conversation_id)
+            # ConversationId is an object from exchangelib
+            # Try to extract the actual ID value
+            try:
+                # ConversationId might have an 'id' attribute or need str() conversion
+                if hasattr(conversation_id, 'id'):
+                    conversation_id = str(conversation_id.id)
+                elif hasattr(conversation_id, '__str__'):
+                    conversation_id = str(conversation_id)
+                else:
+                    # Fallback: use repr
+                    conversation_id = repr(conversation_id)
+            except Exception as e:
+                logger.warning(
+                    "Failed to extract conversation_id",
+                    conversation_id_type=type(conversation_id).__name__,
+                    error=str(e)
+                )
+                conversation_id = ""
         else:
             conversation_id = ""
         
@@ -388,7 +404,13 @@ class EWSIngest:
                 normalized_msg = self._normalize_message(msg)
                 normalized_messages.append(normalized_msg)
             except Exception as e:
-                logger.warning("Failed to normalize message", msg_id=str(msg.id), error=str(e))
+                import traceback
+                logger.warning(
+                    "Failed to normalize message", 
+                    msg_id=str(msg.id), 
+                    error=str(e),
+                    traceback=traceback.format_exc()
+                )
                 continue
         
         logger.info("Messages normalized", count=len(normalized_messages))

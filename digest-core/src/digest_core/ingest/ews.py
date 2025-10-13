@@ -130,12 +130,13 @@ class EWSIngest:
         """Disable SSL verification globally (use with caution!).
         
         Warning:
-            This method monkey-patches requests.Session.request globally
-            for all HTTP requests. It should only be called once per process.
+            This method monkey-patches requests and httpx libraries globally
+            for all HTTP/HTTPS requests. It should only be called once per process.
         
         Side effects:
             - Disables urllib3 SSL warnings globally
             - Patches requests.Session.request to use verify=False
+            - Patches httpx.Client to use verify=False
             - Sets class-level flag _ssl_verification_disabled
         """
         if cls._ssl_verification_disabled:
@@ -147,7 +148,7 @@ class EWSIngest:
         import requests
         urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
         
-        # Monkey-patch requests.Session.request (only once)
+        # Monkey-patch requests.Session.request (for exchangelib)
         if cls._original_request is None:
             cls._original_request = requests.Session.request
             
@@ -157,10 +158,36 @@ class EWSIngest:
             return cls._original_request(self, method, url, **kwargs)
         
         requests.Session.request = patched_request
+        
+        # Also monkey-patch httpx.Client (for LLM Gateway)
+        try:
+            import httpx
+            import ssl as ssl_module
+            
+            # Create a custom SSL context that doesn't verify
+            unverified_ssl_context = ssl_module.create_default_context()
+            unverified_ssl_context.check_hostname = False
+            unverified_ssl_context.verify_mode = ssl_module.CERT_NONE
+            
+            # Monkey-patch httpx.Client.__init__ to use unverified SSL context
+            if not hasattr(cls, '_original_httpx_init'):
+                cls._original_httpx_init = httpx.Client.__init__
+                
+            def patched_httpx_init(self, *args, **kwargs):
+                """Patched version of httpx.Client.__init__ that disables SSL verification."""
+                kwargs['verify'] = False
+                return cls._original_httpx_init(self, *args, **kwargs)
+            
+            httpx.Client.__init__ = patched_httpx_init
+            
+            logger.debug("httpx SSL verification also disabled")
+        except ImportError:
+            logger.debug("httpx not installed, skipping httpx patch")
+        
         cls._ssl_verification_disabled = True
         
         logger.critical(
-            "SSL verification disabled globally for all HTTP requests",
+            "SSL verification disabled globally for all HTTP/HTTPS libraries (requests, httpx)",
             extra={"security_risk": "HIGH", "testing_only": True}
         )
     
@@ -175,13 +202,25 @@ class EWSIngest:
             logger.debug("SSL verification not disabled, nothing to restore")
             return
             
+        # Restore requests.Session.request
         if cls._original_request is not None:
             import requests
             requests.Session.request = cls._original_request
-            cls._ssl_verification_disabled = False
-            logger.info("SSL verification restored to original state")
+            logger.debug("requests SSL verification restored")
         else:
-            logger.warning("Cannot restore SSL verification: original method not saved")
+            logger.warning("Cannot restore requests SSL verification: original method not saved")
+        
+        # Restore httpx.Client.__init__ if it was patched
+        if hasattr(cls, '_original_httpx_init') and cls._original_httpx_init is not None:
+            try:
+                import httpx
+                httpx.Client.__init__ = cls._original_httpx_init
+                logger.debug("httpx SSL verification restored")
+            except ImportError:
+                pass
+        
+        cls._ssl_verification_disabled = False
+        logger.info("SSL verification restored to original state for all libraries")
     
     def _get_time_window(self, digest_date: str, time_config: TimeConfig) -> tuple[datetime, datetime]:
         """Calculate time window for email fetching."""

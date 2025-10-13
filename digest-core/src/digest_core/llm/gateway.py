@@ -98,6 +98,7 @@ class LLMGateway:
                 "messages": messages,
                 "temperature": 0.1,  # Low temperature for consistent output
                 "max_tokens": 2000,  # Reasonable limit for response
+                "response_format": {"type": "json_object"},  # Force JSON output
             }
             
             # Add authorization header
@@ -131,13 +132,29 @@ class LLMGateway:
                     "data": {"sections": []}
                 }
             
-            # Try to parse JSON
+            # Try to parse JSON (handle markdown code blocks)
             try:
-                parsed_content = json.loads(content)
+                # Strip markdown code blocks if present
+                content_stripped = content.strip()
+                if content_stripped.startswith("```"):
+                    # Extract JSON from markdown code block
+                    lines = content_stripped.split("\n")
+                    # Remove first line (```json or ```)
+                    lines = lines[1:]
+                    # Remove last line if it's ```
+                    if lines and lines[-1].strip() == "```":
+                        lines = lines[:-1]
+                    content_stripped = "\n".join(lines).strip()
+                
+                parsed_content = json.loads(content_stripped)
             except json.JSONDecodeError as e:
-                logger.warning("Invalid JSON in LLM response, retrying", error=str(e))
+                logger.warning(
+                    "Invalid JSON in LLM response, retrying", 
+                    error=str(e),
+                    content_preview=content[:500] if len(content) > 500 else content
+                )
                 # Add retry instruction to system message
-                messages[0]["content"] = messages[0]["content"] + "\n\nIMPORTANT: Return strict JSON per schema only. No additional text."
+                messages[0]["content"] = messages[0]["content"] + "\n\nIMPORTANT: Return ONLY valid JSON per schema. No markdown, no code blocks, no additional text."
                 raise ValueError("Invalid JSON response")
             
             # Try to capture token usage from headers or body

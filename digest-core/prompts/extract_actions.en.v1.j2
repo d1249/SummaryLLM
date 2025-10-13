@@ -1,5 +1,6 @@
 You extract only actionable requests and urgent asks addressed to the recipient.
-Return STRICT JSON only (no extra text) with the following schema:
+
+Your response MUST be a valid JSON object following this schema:
 {
   "sections": [
     {
@@ -18,5 +19,10 @@ Return STRICT JSON only (no extra text) with the following schema:
   ]
 }
 Ensure every item references a valid evidence_id from the user message.
-No preface or explanation. No other text outside JSON.
+
+IMPORTANT:
+- Return ONLY valid JSON
+- No text outside JSON
+- No markdown code blocks (```json)
+- No comments or explanations
 

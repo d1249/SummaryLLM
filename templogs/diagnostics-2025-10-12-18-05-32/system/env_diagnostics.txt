@@ -1,0 +1,36 @@
+Digest-core environment diagnostics...
+======================================
+Python version:
+Python 3.12.12
+
+Required tools:
+✓ uv: /opt/homebrew/bin/uv
+✓ docker: /usr/local/bin/docker
+✗ pytest: not found
+✗ ruff: not found
+✗ black: not found
+
+Environment variables:
+✗ EWS_USER_UPN: not set
+✗ EWS_PASSWORD: not set
+✗ LLM_TOKEN: not set
+✗ EWS_ENDPOINT: not set
+✗ LLM_ENDPOINT: not set
+
+CA certificate:
+✗ Corporate CA not found in standard locations
+  Checked paths:
+    - /etc/ssl/corp-ca.pem
+    - /Users/ruapgr2/.ssl/corp-ca.pem
+    - ./certs/corp-ca.pem
+
+Directory permissions:
+✓ /Users/ruapgr2/.digest-out: exists (permissions: 755)
+✓ /Users/ruapgr2/.digest-state: exists (permissions: 755)
+✓ ./out: exists (permissions: 755)
+✓ ./.state: exists (permissions: 755)
+
+Network connectivity:
+✓ Internet connectivity: OK
+
+Diagnostics completed!

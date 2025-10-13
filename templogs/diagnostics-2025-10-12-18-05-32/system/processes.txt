@@ -1,0 +1,5 @@
+=== Running Processes ===
+root               559   0.6  0.1 411668080   9280   ??  Ss    1Oct25   6:28.04 /usr/local/munki/munki-python /opt/meux/wifi_info.py
+ruapgr2          80406   0.6  0.0 410727664   2416 s001  S+    6:05PM   0:00.01 /bin/bash /Users/ruapgr2/summaryllm/digest-core/scripts/collect_diagnostics.sh
+ruapgr2           2844   0.0  0.1 411582112  15920   ??  S     1Oct25   4:50.76 /usr/local/munki/munki-python /usr/local/munki/app_usage_monitor
+root               607   0.0  0.0 411151936   2672   ??  S     1Oct25   0:28.23 /usr/local/munki/munki-python -m http.server 58203 -p HTTP/1.1 -d /opt/rbru/proxypac/

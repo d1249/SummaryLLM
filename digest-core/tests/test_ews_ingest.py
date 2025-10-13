@@ -4,18 +4,23 @@ Test EWS ingestion with mocked exchangelib.
 import pytest
 from unittest.mock import Mock, patch, MagicMock
 from datetime import datetime, timezone, timedelta
-from digest_core.ingest.ews import EWSIngest
-from digest_core.config import Config
+from src.digest_core.ingest.ews import EWSIngest
+from src.digest_core.config import Config
 
 
 @pytest.fixture
 def mock_config():
     """Mock configuration for EWS testing."""
     config = Mock(spec=Config)
+    config.ews = Mock()
     config.ews.endpoint = "https://mail.company.com/EWS/Exchange.asmx"
     config.ews.user_upn = "test@company.com"
-    config.get_ews_password.return_value = "test_password"
+    config.ews.verify_ca = None
     config.ews.sync_state_path = "/tmp/test.state"
+    config.ews.user_login = "testuser"
+    config.ews.user_domain = "company.com"
+    config.get_ews_password.return_value = "test_password"
+    config.time = Mock()
     config.time.timezone = "UTC"
     config.time.window_type = "calendar_day"
     return config

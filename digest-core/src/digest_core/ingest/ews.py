@@ -62,7 +62,7 @@ class EWSIngest:
         ntlm_username = self.config.get_ntlm_username()
         credentials = Credentials(
             username=ntlm_username,
-            password=self.config.get_ews_password()
+            password=self.config.get_password()
         )
         
         logger.debug("Using NTLM authentication", username=ntlm_username)

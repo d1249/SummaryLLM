@@ -1,0 +1,56 @@
+=== System Information ===
+Date: Sun Oct 12 18:05:32 MSK 2025
+Hostname: n-msk-macpgr2
+User: ruapgr2
+OS: Darwin n-msk-macpgr2 23.6.0 Darwin Kernel Version 23.6.0: Thu Sep 12 23:36:55 PDT 2024; root:xnu-10063.141.1.701.1~1/RELEASE_ARM64_T8112 arm64
+
+=== Python Environment ===
+Python 3.12.12
+Python path: /Users/ruapgr2/SummaryLLM/digest-core/.venv/bin/python3
+
+=== Environment Variables (sanitized) ===
+DIGEST_LOG_LEVEL=DEBUG
+
+=== Disk Space ===
+Filesystem                                         Size    Used   Avail Capacity iused ifree %iused  Mounted on
+/dev/disk3s3s1                                    460Gi    11Gi   325Gi     4%    404k  3.4G    0%   /
+devfs                                             197Ki   197Ki     0Bi   100%     683     0  100%   /dev
+/dev/disk3s6                                      460Gi   7.0Gi   325Gi     3%       7  3.4G    0%   /System/Volumes/VM
+/dev/disk3s4                                      460Gi    11Gi   325Gi     4%    1.6k  3.4G    0%   /System/Volumes/Preboot
+/dev/disk3s2                                      460Gi   2.4Gi   325Gi     1%    1.3k  3.4G    0%   /System/Volumes/Update
+/dev/disk1s2                                      500Mi   6.0Mi   482Mi     2%       1  4.9M    0%   /System/Volumes/xarts
+/dev/disk1s1                                      500Mi   5.6Mi   482Mi     2%      37  4.9M    0%   /System/Volumes/iSCPreboot
+/dev/disk1s3                                      500Mi   2.0Mi   482Mi     1%      60  4.9M    0%   /System/Volumes/Hardware
+/dev/disk3s1                                      460Gi   102Gi   325Gi    24%    2.7M  3.4G    0%   /System/Volumes/Data
+map auto_home                                       0Bi     0Bi     0Bi   100%       0     0     -   /System/Volumes/Data/home
+map -fstab                                          0Bi     0Bi     0Bi   100%       0     0     -   /System/Volumes/Data/Network/Servers
+/dev/disk3s3                                      460Gi    11Gi   325Gi     4%    404k  3.4G    0%   /System/Volumes/Update/mnt1
+/Users/ruapgr2/Downloads/Visual Studio Code.app   460Gi   101Gi   326Gi    24%    2.8M  3.4G    0%   /private/var/folders/sc/tqb9r0wd16n_fr3qxw0xg3s15l_xd7/T/AppTranslocation/BFD26A70-8C61-45C1-8983-431E9317DE41
+
+=== Memory Usage ===
+Mach Virtual Memory Statistics: (page size of 16384 bytes)
+Pages free:                                9957.
+Pages active:                            219800.
+Pages inactive:                          217963.
+Pages speculative:                         1782.
+Pages throttled:                              0.
+Pages wired down:                        156743.
+Pages purgeable:                           2255.
+"Translation faults":                4427755569.
+Pages copy-on-write:                  135713926.
+Pages zero filled:                    954322405.
+Pages reactivated:                    558046162.
+Pages purged:                          28030141.
+File-backed pages:                       141452.
+Anonymous pages:                         298093.
+Pages stored in compressor:             1753293.
+Pages occupied by compressor:            405667.
+Decompressions:                      2016827155.
+Compressions:                        2090181370.
+Pageins:                               54234736.
+Pageouts:                                836374.
+Swapins:                                5683208.
+Swapouts:                               7124065.
+
+=== Network Connectivity ===
+Internet: OK

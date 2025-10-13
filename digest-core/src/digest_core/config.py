@@ -29,8 +29,28 @@ class EWSConfig(BaseModel):
     page_size: int = Field(default=100, description="Page size for pagination")
     sync_state_path: str = Field(default=".state/ews.syncstate", description="Sync state file path")
     
+    def __init__(self, **kwargs):
+        # Читаем значения из переменных окружения если они не заданы
+        env_values = {
+            'endpoint': os.getenv('EWS_ENDPOINT', ''),
+            'user_upn': os.getenv('EWS_USER_UPN', ''),
+            'user_login': os.getenv('EWS_USER_LOGIN'),
+            'user_domain': os.getenv('EWS_USER_DOMAIN'),
+        }
+        
+        # Применяем значения из переменных окружения только если они не заданы явно
+        for key, env_value in env_values.items():
+            if key not in kwargs and env_value:
+                kwargs[key] = env_value
+                
+        super().__init__(**kwargs)
+    
     def get_password(self) -> str:
-        """Get EWS password from environment."""
+        """Get EWS password from environment.
+        
+        This method should be used when you have an EWSConfig instance directly.
+        For Config instances, use Config.get_ews_password() instead.
+        """
         password = os.getenv(self.password_env)
         if not password:
             raise ValueError(f"Environment variable {self.password_env} not set")
@@ -56,6 +76,19 @@ class LLMConfig(BaseModel):
     headers: Dict[str, str] = Field(default_factory=dict, description="Additional headers")
     max_tokens_per_run: int = Field(default=30000, description="Max tokens per run")
     cost_limit_per_run: float = Field(default=5.0, description="Cost limit per run in USD")
+    
+    def __init__(self, **kwargs):
+        # Читаем значения из переменных окружения если они не заданы
+        env_values = {
+            'endpoint': os.getenv('LLM_ENDPOINT', ''),
+        }
+        
+        # Применяем значения из переменных окружения только если они не заданы явно
+        for key, env_value in env_values.items():
+            if key not in kwargs and env_value:
+                kwargs[key] = env_value
+                
+        super().__init__(**kwargs)
     
     def get_token(self) -> str:
         """Get LLM token from environment."""
@@ -149,7 +182,11 @@ class Config(BaseSettings):
             self.observability = ObservabilityConfig(**yaml_config['observability'])
     
     def get_ews_password(self) -> str:
-        """Get EWS password from environment."""
+        """Get EWS password from environment.
+        
+        This method delegates to the EWSConfig.get_password() method.
+        Use this method when you have a Config instance.
+        """
         return self.ews.get_password()
     
     def get_llm_token(self) -> str:

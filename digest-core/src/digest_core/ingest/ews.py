@@ -303,10 +303,13 @@ class EWSIngest:
             msg_id = msg_id[1:-1]  # Remove angle brackets
         msg_id = (msg_id or "").lower()
         
-        # Normalize conversation ID
-        conversation_id = getattr(msg, 'conversation_id', None) or ""
+        # Normalize conversation ID (convert ConversationId object to string)
+        conversation_id = getattr(msg, 'conversation_id', None)
         if conversation_id:
-            conversation_id = conversation_id.encode('utf-8', errors='ignore').decode('utf-8')
+            # ConversationId is an object, convert to string first
+            conversation_id = str(conversation_id)
+        else:
+            conversation_id = ""
         
         # Get sender email address
         sender_email = ""

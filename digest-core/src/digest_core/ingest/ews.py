@@ -231,13 +231,14 @@ class EWSIngest:
             start_date = datetime.strptime(digest_date, "%Y-%m-%d").replace(tzinfo=user_tz)
             end_date = start_date.replace(hour=23, minute=59, second=59)
             
-            # Convert to UTC (use exchangelib UTC)
-            start_utc = start_date.astimezone(UTC)
-            end_utc = end_date.astimezone(UTC)
+            # Convert to standard UTC (datetime.timezone.utc, not EWSTimeZone)
+            # We'll convert to EWSDateTime later when querying EWS
+            start_utc = start_date.astimezone(timezone.utc)
+            end_utc = end_date.astimezone(timezone.utc)
             
         else:  # rolling_24h
-            # Rolling 24 hours from now (use exchangelib UTC)
-            now_utc = datetime.now(UTC)
+            # Rolling 24 hours from now (use standard UTC)
+            now_utc = datetime.now(timezone.utc)
             end_utc = now_utc
             start_utc = now_utc - timedelta(hours=self.config.lookback_hours)
             
@@ -258,9 +259,16 @@ class EWSIngest:
     def _fetch_messages_with_retry(self, folder: Folder, start_date: datetime, end_date: datetime) -> List[Message]:
         """Fetch messages with retry logic."""
         try:
-            # Create EWS datetime objects
-            start_ews = EWSDateTime.from_datetime(start_date)
-            end_ews = EWSDateTime.from_datetime(end_date)
+            # Create EWS datetime objects (only if not already EWSDateTime)
+            if isinstance(start_date, EWSDateTime):
+                start_ews = start_date
+            else:
+                start_ews = EWSDateTime.from_datetime(start_date)
+                
+            if isinstance(end_date, EWSDateTime):
+                end_ews = end_date
+            else:
+                end_ews = EWSDateTime.from_datetime(end_date)
             
             # Create filter for last 24 hours
             filter_query = Q(
@@ -356,14 +364,29 @@ class EWSIngest:
         elif hasattr(msg, 'body') and msg.body:
             text_body = str(msg.body)
         
-        # Convert datetime to UTC if needed
-        # exchangelib requires EWSTimeZone, not standard datetime.timezone
+        # Convert datetime to standard Python datetime with UTC timezone
+        # msg.datetime_received might be EWSDateTime, convert to standard datetime
         datetime_received = msg.datetime_received
-        if datetime_received.tzinfo is None:
-            datetime_received = datetime_received.replace(tzinfo=UTC)
-        elif not isinstance(datetime_received.tzinfo, type(UTC)):
-            # Convert to EWS UTC timezone
-            datetime_received = datetime_received.astimezone(UTC)
+        
+        # If it's EWSDateTime, convert to standard datetime
+        if isinstance(datetime_received, EWSDateTime):
+            # EWSDateTime can be converted to standard datetime
+            datetime_received = datetime(
+                datetime_received.year,
+                datetime_received.month,
+                datetime_received.day,
+                datetime_received.hour,
+                datetime_received.minute,
+                datetime_received.second,
+                datetime_received.microsecond,
+                tzinfo=timezone.utc
+            )
+        elif datetime_received.tzinfo is None:
+            # Add UTC timezone if missing
+            datetime_received = datetime_received.replace(tzinfo=timezone.utc)
+        elif datetime_received.tzinfo != timezone.utc:
+            # Convert to UTC
+            datetime_received = datetime_received.astimezone(timezone.utc)
         
         return NormalizedMessage(
             msg_id=msg_id,

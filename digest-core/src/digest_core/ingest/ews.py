@@ -36,7 +36,7 @@ class EWSIngest:
     
     # Class-level flags to track global SSL patching (thread-safety consideration)
     _ssl_verification_disabled = False
-    _original_get = None
+    _original_request = None
     
     def __init__(self, config: EWSConfig):
         self.config = config
@@ -130,13 +130,12 @@ class EWSIngest:
         """Disable SSL verification globally (use with caution!).
         
         Warning:
-            This method monkey-patches the BaseProtocol.get method globally
-            for all instances of EWSIngest. It should only be called once
-            per process lifetime.
+            This method monkey-patches requests.Session.request globally
+            for all HTTP requests. It should only be called once per process.
         
         Side effects:
             - Disables urllib3 SSL warnings globally
-            - Patches BaseProtocol.get to return sessions with verify=False
+            - Patches requests.Session.request to use verify=False
             - Sets class-level flag _ssl_verification_disabled
         """
         if cls._ssl_verification_disabled:
@@ -145,23 +144,23 @@ class EWSIngest:
             
         # Suppress SSL warnings globally
         import urllib3
+        import requests
         urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
         
-        # Monkey-patch BaseProtocol.get (only once)
-        if cls._original_get is None:
-            cls._original_get = BaseProtocol.get
+        # Monkey-patch requests.Session.request (only once)
+        if cls._original_request is None:
+            cls._original_request = requests.Session.request
             
-        def patched_get(self, *args, **kwargs):
-            """Patched version of BaseProtocol.get that disables SSL verification."""
-            session = cls._original_get(self, *args, **kwargs)
-            session.verify = False
-            return session
+        def patched_request(self, method, url, **kwargs):
+            """Patched version of Session.request that disables SSL verification."""
+            kwargs['verify'] = False
+            return cls._original_request(self, method, url, **kwargs)
         
-        BaseProtocol.get = patched_get
+        requests.Session.request = patched_request
         cls._ssl_verification_disabled = True
         
         logger.critical(
-            "SSL verification disabled globally for all EWS connections",
+            "SSL verification disabled globally for all HTTP requests",
             extra={"security_risk": "HIGH", "testing_only": True}
         )
     
@@ -176,8 +175,9 @@ class EWSIngest:
             logger.debug("SSL verification not disabled, nothing to restore")
             return
             
-        if cls._original_get is not None:
-            BaseProtocol.get = cls._original_get
+        if cls._original_request is not None:
+            import requests
+            requests.Session.request = cls._original_request
             cls._ssl_verification_disabled = False
             logger.info("SSL verification restored to original state")
         else:

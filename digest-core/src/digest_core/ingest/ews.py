@@ -8,7 +8,7 @@ from pathlib import Path
 import pytz
 from exchangelib import (
     Credentials, Account, DELEGATE, Configuration, NTLM, 
-    Message, Folder, Q, EWSDateTime
+    Message, Folder, Q, EWSDateTime, UTC
 )
 from exchangelib.protocol import BaseProtocol
 import tenacity
@@ -231,13 +231,13 @@ class EWSIngest:
             start_date = datetime.strptime(digest_date, "%Y-%m-%d").replace(tzinfo=user_tz)
             end_date = start_date.replace(hour=23, minute=59, second=59)
             
-            # Convert to UTC
-            start_utc = start_date.astimezone(timezone.utc)
-            end_utc = end_date.astimezone(timezone.utc)
+            # Convert to UTC (use exchangelib UTC)
+            start_utc = start_date.astimezone(UTC)
+            end_utc = end_date.astimezone(UTC)
             
         else:  # rolling_24h
-            # Rolling 24 hours from now
-            now_utc = datetime.now(timezone.utc)
+            # Rolling 24 hours from now (use exchangelib UTC)
+            now_utc = datetime.now(UTC)
             end_utc = now_utc
             start_utc = now_utc - timedelta(hours=self.config.lookback_hours)
             
@@ -357,11 +357,13 @@ class EWSIngest:
             text_body = str(msg.body)
         
         # Convert datetime to UTC if needed
+        # exchangelib requires EWSTimeZone, not standard datetime.timezone
         datetime_received = msg.datetime_received
         if datetime_received.tzinfo is None:
-            datetime_received = datetime_received.replace(tzinfo=timezone.utc)
-        elif datetime_received.tzinfo != timezone.utc:
-            datetime_received = datetime_received.astimezone(timezone.utc)
+            datetime_received = datetime_received.replace(tzinfo=UTC)
+        elif not isinstance(datetime_received.tzinfo, type(UTC)):
+            # Convert to EWS UTC timezone
+            datetime_received = datetime_received.astimezone(UTC)
         
         return NormalizedMessage(
             msg_id=msg_id,

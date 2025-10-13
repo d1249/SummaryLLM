@@ -34,28 +34,52 @@ class NormalizedMessage(NamedTuple):
 class EWSIngest:
     """EWS email ingestion with NTLM authentication."""
     
+    # Class-level flags to track global SSL patching (thread-safety consideration)
+    _ssl_verification_disabled = False
+    _original_get = None
+    
     def __init__(self, config: EWSConfig):
         self.config = config
         self.account: Optional[Account] = None
         self._setup_ssl_context()
         
     def _setup_ssl_context(self):
-        """Setup SSL context for corporate CA verification."""
+        """Setup SSL context based on configuration.
+        
+        Three modes:
+        1. verify_ssl=false: Disable all SSL verification (TESTING ONLY!)
+        2. verify_ca specified: Use custom CA certificate
+        3. Default: Use system CA certificates
+        
+        Warning:
+            Setting verify_ssl=false disables SSL verification globally
+            for all EWS connections in this process. Use only for testing!
+        """
+        # Create SSL context once
+        self.ssl_context = ssl.create_default_context()
+        
         if not self.config.verify_ssl:
-            # Disable SSL verification (for testing only!)
-            self.ssl_context = ssl.create_default_context()
-            self.ssl_context.check_hostname = False
-            self.ssl_context.verify_mode = ssl.CERT_NONE
-            logger.warning("SSL verification disabled (verify_ssl=false) - use only for testing!")
+            # Полностью отключаем SSL verification для тестирования
+            self.ssl_context.check_hostname = False  # Не проверяем hostname
+            self.ssl_context.verify_mode = ssl.CERT_NONE  # Не проверяем сертификат
+            logger.warning(
+                "SSL verification disabled (verify_ssl=false)",
+                extra={"security_warning": "Use only for testing!"}
+            )
         elif self.config.verify_ca:
-            # Create SSL context that trusts corporate CA
-            self.ssl_context = ssl.create_default_context()
-            self.ssl_context.load_verify_locations(self.config.verify_ca)
-            logger.info("SSL context configured with corporate CA", ca_path=self.config.verify_ca)
+            # Use custom CA certificate
+            try:
+                self.ssl_context.load_verify_locations(self.config.verify_ca)
+                logger.info("SSL context configured with corporate CA", 
+                          ca_path=self.config.verify_ca)
+            except FileNotFoundError as e:
+                logger.error("Corporate CA certificate not found",
+                           ca_path=self.config.verify_ca,
+                           error=str(e))
+                raise
         else:
-            # Use default SSL context
-            self.ssl_context = ssl.create_default_context()
-            logger.warning("No corporate CA specified, using default SSL verification")
+            # Use default system CA
+            logger.warning("Using system CA certificates for SSL verification")
         
     def _connect(self) -> Account:
         """Establish EWS connection with NTLM authentication."""
@@ -73,8 +97,12 @@ class EWSIngest:
         
         logger.debug("Using NTLM authentication", username=ntlm_username)
         
-        # Attach SSL context that trusts corporate CA
+        # Set SSL context (thread-safe assignment)
         BaseProtocol.SSL_CONTEXT = self.ssl_context
+        
+        # Handle SSL verification disabling (with proper guards)
+        if not self.config.verify_ssl and not self.__class__._ssl_verification_disabled:
+            self._disable_ssl_verification()
 
         # Create configuration with NTLM auth and explicit service endpoint
         config_obj = Configuration(
@@ -93,9 +121,67 @@ class EWSIngest:
         
         logger.info("EWS connection established", 
                    endpoint=self.config.endpoint,
-                   user=self.config.user_upn,
+                   user="[[REDACTED]]",  # Маскируем email в логах
                    auth_type="NTLM")
         return self.account
+    
+    @classmethod
+    def _disable_ssl_verification(cls):
+        """Disable SSL verification globally (use with caution!).
+        
+        Warning:
+            This method monkey-patches the BaseProtocol.get method globally
+            for all instances of EWSIngest. It should only be called once
+            per process lifetime.
+        
+        Side effects:
+            - Disables urllib3 SSL warnings globally
+            - Patches BaseProtocol.get to return sessions with verify=False
+            - Sets class-level flag _ssl_verification_disabled
+        """
+        if cls._ssl_verification_disabled:
+            logger.debug("SSL verification already disabled, skipping")
+            return
+            
+        # Suppress SSL warnings globally
+        import urllib3
+        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+        
+        # Monkey-patch BaseProtocol.get (only once)
+        if cls._original_get is None:
+            cls._original_get = BaseProtocol.get
+            
+        def patched_get(self, *args, **kwargs):
+            """Patched version of BaseProtocol.get that disables SSL verification."""
+            session = cls._original_get(self, *args, **kwargs)
+            session.verify = False
+            return session
+        
+        BaseProtocol.get = patched_get
+        cls._ssl_verification_disabled = True
+        
+        logger.critical(
+            "SSL verification disabled globally for all EWS connections",
+            extra={"security_risk": "HIGH", "testing_only": True}
+        )
+    
+    @classmethod
+    def restore_ssl_verification(cls):
+        """Restore original SSL verification (cleanup method).
+        
+        This method should be called when SSL verification needs to be re-enabled,
+        typically in test cleanup or when transitioning from testing to production.
+        """
+        if not cls._ssl_verification_disabled:
+            logger.debug("SSL verification not disabled, nothing to restore")
+            return
+            
+        if cls._original_get is not None:
+            BaseProtocol.get = cls._original_get
+            cls._ssl_verification_disabled = False
+            logger.info("SSL verification restored to original state")
+        else:
+            logger.warning("Cannot restore SSL verification: original method not saved")
     
     def _get_time_window(self, digest_date: str, time_config: TimeConfig) -> tuple[datetime, datetime]:
         """Calculate time window for email fetching."""

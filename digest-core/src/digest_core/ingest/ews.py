@@ -41,7 +41,13 @@ class EWSIngest:
         
     def _setup_ssl_context(self):
         """Setup SSL context for corporate CA verification."""
-        if self.config.verify_ca:
+        if not self.config.verify_ssl:
+            # Disable SSL verification (for testing only!)
+            self.ssl_context = ssl.create_default_context()
+            self.ssl_context.check_hostname = False
+            self.ssl_context.verify_mode = ssl.CERT_NONE
+            logger.warning("SSL verification disabled (verify_ssl=false) - use only for testing!")
+        elif self.config.verify_ca:
             # Create SSL context that trusts corporate CA
             self.ssl_context = ssl.create_default_context()
             self.ssl_context.load_verify_locations(self.config.verify_ca)

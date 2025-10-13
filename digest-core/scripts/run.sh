@@ -46,3 +46,4 @@ else
     echo "Режим: полный запуск"
     python3 -m src.digest_core.cli run "$@"
 fi
+

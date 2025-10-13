@@ -1,75 +1,316 @@
 #!/bin/bash
+# SummaryLLM Doctor - диагностика окружения
 set -euo pipefail
 
-# Color codes for output
+# Color codes
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-check() {
-    local name="$1" cmd="$2" fix="$3"
-    if command -v $cmd >/dev/null 2>&1; then
-        echo -e "${GREEN}✓${NC} $name: $($cmd --version 2>/dev/null | head -n1 || echo 'found')"
+# Icons
+CHECK="${GREEN}✓${NC}"
+CROSS="${RED}✗${NC}"
+WARN="${YELLOW}⚠${NC}"
+INFO="${BLUE}ℹ${NC}"
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+
+echo ""
+echo "======================================"
+echo "  SummaryLLM Environment Doctor"
+echo "======================================"
+echo ""
+
+# Counters
+ERRORS=0
+WARNINGS=0
+SUCCESS=0
+
+# Function to print status
+print_check() {
+    local status=$1
+    local message=$2
+    if [ "$status" = "ok" ]; then
+        echo -e "${CHECK} ${message}"
+        ((SUCCESS++))
+    elif [ "$status" = "warn" ]; then
+        echo -e "${WARN} ${message}"
+        ((WARNINGS++))
     else
-        echo -e "${RED}✗${NC} $name: not found"
-        [[ -n "$fix" ]] && echo -e "${BLUE}  →${NC} Install: $fix"
+        echo -e "${CROSS} ${message}"
+        ((ERRORS++))
     fi
 }
 
-echo -e "${BLUE}SummaryLLM Doctor${NC}"
-echo "------------------"
-
-# Python >=3.11
-FOUND_PY=""
-for p in python3.12 python3.11 python3; do
-    if command -v $p >/dev/null 2>&1; then
-        v=$($p --version | awk '{print $2}')
-        major=${v%%.*}; minor=${v#*.}; minor=${minor%%.*}
-        if [[ $major -gt 3 || ($major -eq 3 && $minor -ge 11) ]]; then
-            echo -e "${GREEN}✓${NC} Python: $v ($p)"
-            FOUND_PY="$p"
-            break
+# Check 1: Python version
+echo "Проверка Python..."
+if command -v python3 &> /dev/null; then
+    PYTHON_VERSION=$(python3 --version 2>&1 | awk '{print $2}')
+    PYTHON_MAJOR=$(echo "$PYTHON_VERSION" | cut -d. -f1)
+    PYTHON_MINOR=$(echo "$PYTHON_VERSION" | cut -d. -f2)
+    
+    if [ "$PYTHON_MAJOR" -ge 3 ] && [ "$PYTHON_MINOR" -ge 11 ]; then
+        print_check "ok" "Python $PYTHON_VERSION найден"
+    else
+        print_check "error" "Python $PYTHON_VERSION (требуется 3.11+)"
+        if command -v python3.11 &> /dev/null; then
+            PY311_VERSION=$(python3.11 --version 2>&1 | awk '{print $2}')
+            print_check "ok" "Python3.11 доступен: $PY311_VERSION"
+            echo -e "  ${INFO} Используйте: python3.11 -m digest_core.cli ..."
+        else
+            echo -e "  ${INFO} Установите: brew install python@3.11 (macOS) или sudo apt install python3.11 (Linux)"
         fi
     fi
-done
-if [[ -z "$FOUND_PY" ]]; then
-    echo -e "${RED}✗${NC} Python 3.11+: not found"
-    if command -v brew >/dev/null 2>&1; then
-        echo -e "${BLUE}  →${NC} Install: brew install python@3.11"
-        echo -e "${BLUE}  →${NC} PATH: export PATH=\"\$(brew --prefix)/opt/python@3.11/bin:\$PATH\""
-    elif command -v apt-get >/dev/null 2>&1; then
-        echo -e "${BLUE}  →${NC} Install: sudo apt-get update && sudo apt-get install -y python3.11 python3.11-venv python3.11-dev"
+else
+    print_check "error" "Python не найден"
+    echo -e "  ${INFO} Установите Python 3.11+"
+fi
+
+# Check 2: Git
+echo ""
+echo "Проверка Git..."
+if command -v git &> /dev/null; then
+    GIT_VERSION=$(git --version | awk '{print $3}')
+    print_check "ok" "Git $GIT_VERSION найден"
+else
+    print_check "error" "Git не найден"
+    echo -e "  ${INFO} Установите: brew install git (macOS) или sudo apt install git (Linux)"
+fi
+
+# Check 3: Virtual environment
+echo ""
+echo "Проверка виртуального окружения..."
+if [ -d "$PROJECT_ROOT/digest-core/.venv" ]; then
+    print_check "ok" "Виртуальное окружение найдено в digest-core/.venv"
+    
+    # Check if activated
+    if [[ "$VIRTUAL_ENV" == *"digest-core/.venv"* ]]; then
+        print_check "ok" "Виртуальное окружение активно"
+    else
+        print_check "warn" "Виртуальное окружение не активировано"
+        echo -e "  ${INFO} Активируйте: source digest-core/.venv/bin/activate"
+    fi
+    
+    # Check if digest_core installed
+    if [ -f "$PROJECT_ROOT/digest-core/.venv/bin/python" ]; then
+        if "$PROJECT_ROOT/digest-core/.venv/bin/python" -c "import digest_core" 2>/dev/null; then
+            print_check "ok" "Пакет digest_core установлен"
+        else
+            print_check "warn" "Пакет digest_core не установлен"
+            echo -e "  ${INFO} Установите: cd digest-core && .venv/bin/pip install -e ."
+        fi
+    fi
+else
+    print_check "warn" "Виртуальное окружение не найдено"
+    echo -e "  ${INFO} Создайте: cd digest-core && python3.11 -m venv .venv"
+fi
+
+# Check 4: Environment variables
+echo ""
+echo "Проверка переменных окружения..."
+
+check_env_var() {
+    local var_name=$1
+    local is_required=$2
+    
+    if [ -n "${!var_name:-}" ]; then
+        # Mask sensitive values
+        if [[ "$var_name" == *"PASSWORD"* ]] || [[ "$var_name" == *"TOKEN"* ]]; then
+            print_check "ok" "$var_name установлена (***)"
+        else
+            print_check "ok" "$var_name = ${!var_name}"
+        fi
+    else
+        if [ "$is_required" = "required" ]; then
+            print_check "error" "$var_name не установлена (обязательная)"
+        else
+            print_check "warn" "$var_name не установлена (опциональная)"
+        fi
+    fi
+}
+
+check_env_var "EWS_ENDPOINT" "required"
+check_env_var "EWS_USER_UPN" "required"
+check_env_var "EWS_PASSWORD" "required"
+check_env_var "LLM_ENDPOINT" "optional"
+check_env_var "LLM_TOKEN" "optional"
+check_env_var "OUT_DIR" "optional"
+check_env_var "STATE_DIR" "optional"
+
+# Check 5: Configuration file
+echo ""
+echo "Проверка конфигурационного файла..."
+if [ -f "$PROJECT_ROOT/digest-core/configs/config.yaml" ]; then
+    print_check "ok" "config.yaml найден"
+    
+    # Basic YAML validation
+    if command -v python3 &> /dev/null; then
+        if python3 -c "import yaml; yaml.safe_load(open('$PROJECT_ROOT/digest-core/configs/config.yaml'))" 2>/dev/null; then
+            print_check "ok" "config.yaml валиден (YAML синтаксис)"
+        else
+            print_check "error" "config.yaml имеет ошибки синтаксиса"
+        fi
+    fi
+else
+    print_check "warn" "config.yaml не найден"
+    echo -e "  ${INFO} Создайте: cp digest-core/configs/config.example.yaml digest-core/configs/config.yaml"
+fi
+
+# Check 6: Working directories
+echo ""
+echo "Проверка рабочих директорий..."
+
+check_directory() {
+    local dir_path=$1
+    local dir_name=$2
+    
+    if [ -d "$dir_path" ]; then
+        if [ -w "$dir_path" ]; then
+            print_check "ok" "$dir_name существует и доступна для записи"
+        else
+            print_check "error" "$dir_name существует, но недоступна для записи"
+            echo -e "  ${INFO} Исправьте: chmod 755 $dir_path"
+        fi
+    else
+        print_check "warn" "$dir_name не существует"
+        echo -e "  ${INFO} Создайте: mkdir -p $dir_path"
+    fi
+}
+
+OUT_DIR="${OUT_DIR:-$HOME/.digest-out}"
+STATE_DIR="${STATE_DIR:-$HOME/.digest-state}"
+TMPDIR="${TMPDIR:-$HOME/.digest-temp}"
+LOG_DIR="$HOME/.digest-logs"
+
+check_directory "$OUT_DIR" "OUT_DIR ($OUT_DIR)"
+check_directory "$STATE_DIR" "STATE_DIR ($STATE_DIR)"
+check_directory "$TMPDIR" "TMPDIR ($TMPDIR)"
+check_directory "$LOG_DIR" "LOG_DIR ($LOG_DIR)"
+
+# Check 7: Network connectivity
+echo ""
+echo "Проверка сетевого подключения..."
+
+check_connectivity() {
+    local url=$1
+    local name=$2
+    
+    if command -v curl &> /dev/null; then
+        if curl -s --connect-timeout 5 -I "$url" > /dev/null 2>&1; then
+            print_check "ok" "Доступ к $name ($url)"
+        else
+            print_check "warn" "Нет доступа к $name ($url)"
+        fi
+    else
+        print_check "warn" "curl не установлен, пропускаем проверку подключения"
+    fi
+}
+
+if [ -n "${EWS_ENDPOINT:-}" ]; then
+    check_connectivity "$EWS_ENDPOINT" "EWS"
+else
+    print_check "warn" "EWS_ENDPOINT не установлен, пропускаем проверку"
+fi
+
+if [ -n "${LLM_ENDPOINT:-}" ]; then
+    check_connectivity "$LLM_ENDPOINT" "LLM Gateway"
+else
+    print_check "warn" "LLM_ENDPOINT не установлен, пропускаем проверку"
+fi
+
+# Check 8: SSL certificates (if specified)
+echo ""
+echo "Проверка SSL сертификатов..."
+
+if [ -f "$PROJECT_ROOT/digest-core/configs/config.yaml" ]; then
+    # Extract verify_ca path from config (simple grep)
+    CERT_PATH=$(grep -A 5 "ews:" "$PROJECT_ROOT/digest-core/configs/config.yaml" | grep "verify_ca:" | awk '{print $2}' | tr -d '"' | tr -d "'")
+    
+    if [ -n "$CERT_PATH" ]; then
+        # Expand variables
+        CERT_PATH=$(eval echo "$CERT_PATH")
+        
+        if [ -f "$CERT_PATH" ]; then
+            print_check "ok" "CA сертификат найден: $CERT_PATH"
+        else
+            print_check "warn" "CA сертификат не найден: $CERT_PATH"
+        fi
+    else
+        print_check "warn" "CA сертификат не указан в config.yaml (используется системный trust store)"
     fi
 fi
 
-check "uv" "uv" "brew install uv | curl -LsSf https://astral.sh/uv/install.sh | sh"
-check "docker" "docker" "brew install --cask docker | sudo apt-get install -y docker.io docker-compose"
-check "curl" "curl" "brew install curl | sudo apt-get install -y curl"
-check "openssl" "openssl" "brew install openssl | sudo apt-get install -y openssl"
-check "git" "git" "brew install git | sudo apt-get install -y git"
-
-echo
-echo -e "${BLUE}Package managers:${NC}"
-if command -v brew >/dev/null 2>&1; then
-    echo -e "${GREEN}✓${NC} Homebrew: $(brew --version | head -n1)"
-else
-    echo -e "${YELLOW}⚠${NC} Homebrew: not found (recommended for macOS)"
+# Check 9: Disk space
+echo ""
+echo "Проверка дискового пространства..."
+if command -v df &> /dev/null; then
+    AVAILABLE_KB=$(df -k "$HOME" | tail -1 | awk '{print $4}')
+    AVAILABLE_MB=$((AVAILABLE_KB / 1024))
+    
+    if [ "$AVAILABLE_MB" -gt 500 ]; then
+        print_check "ok" "Свободное место: ${AVAILABLE_MB} MB"
+    elif [ "$AVAILABLE_MB" -gt 100 ]; then
+        print_check "warn" "Свободное место: ${AVAILABLE_MB} MB (рекомендуется >500 MB)"
+    else
+        print_check "error" "Недостаточно места: ${AVAILABLE_MB} MB (требуется минимум 100 MB)"
+    fi
 fi
 
-if command -v apt-get >/dev/null 2>&1; then
-    echo -e "${GREEN}✓${NC} apt: available"
+# Check 10: Required Python packages
+echo ""
+echo "Проверка Python зависимостей..."
+if [ -f "$PROJECT_ROOT/digest-core/.venv/bin/python" ]; then
+    VENV_PYTHON="$PROJECT_ROOT/digest-core/.venv/bin/python"
+    
+    check_package() {
+        local package=$1
+        if $VENV_PYTHON -c "import $package" 2>/dev/null; then
+            print_check "ok" "Пакет $package установлен"
+        else
+            print_check "error" "Пакет $package не установлен"
+        fi
+    }
+    
+    check_package "pydantic"
+    check_package "yaml"
+    check_package "jinja2"
 else
-    echo -e "${YELLOW}⚠${NC} apt: not found"
+    print_check "warn" "Виртуальное окружение не найдено, пропускаем проверку пакетов"
 fi
 
-echo
-echo -e "${BLUE}Quick fix (macOS):${NC}"
-echo "brew update"
-echo "brew install python@3.11 uv docker openssl curl git"
-echo "export PATH=\"\$(brew --prefix)/opt/python@3.11/bin:\$PATH\""
-echo
-echo -e "${BLUE}Quick fix (Ubuntu/Debian):${NC}"
-echo "sudo apt-get update"
-echo "sudo apt-get install -y python3.11 python3.11-venv python3.11-dev docker.io docker-compose curl openssl git"
+# Summary
+echo ""
+echo "======================================"
+echo "  Итоги диагностики"
+echo "======================================"
+echo -e "${GREEN}✓ Успешно: $SUCCESS${NC}"
+echo -e "${YELLOW}⚠ Предупреждений: $WARNINGS${NC}"
+echo -e "${RED}✗ Ошибок: $ERRORS${NC}"
+echo ""
+
+if [ $ERRORS -eq 0 ] && [ $WARNINGS -eq 0 ]; then
+    echo -e "${GREEN}🎉 Все проверки пройдены! Система готова к работе.${NC}"
+    echo ""
+    echo "Следующие шаги:"
+    echo "  1. source .env"
+    echo "  2. cd digest-core"
+    echo "  3. python3.11 -m digest_core.cli run --dry-run"
+    exit 0
+elif [ $ERRORS -eq 0 ]; then
+    echo -e "${YELLOW}⚠ Есть предупреждения, но система должна работать.${NC}"
+    echo ""
+    echo "Рекомендуется устранить предупреждения перед production использованием."
+    exit 0
+else
+    echo -e "${RED}✗ Обнаружены критические ошибки!${NC}"
+    echo ""
+    echo "Исправьте ошибки, затем запустите снова: ./scripts/doctor.sh"
+    echo ""
+    echo "Для помощи см.:"
+    echo "  - docs/testing/E2E_TESTING_GUIDE.md"
+    echo "  - docs/troubleshooting/TROUBLESHOOTING.md"
+    exit 1
+fi

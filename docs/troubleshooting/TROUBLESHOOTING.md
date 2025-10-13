@@ -266,27 +266,82 @@ mkdir -p "$OUT_DIR" "$STATE_DIR" "$TMPDIR"
 ./scripts/test_run.sh
 ```
 
-### 10. Getting Help
+### 10. Corporate Laptop Specific Issues
 
-#### Environment diagnostics
+#### Overview
 
-Run the diagnostics script:
+Корпоративные ноутбуки часто имеют специфичные ограничения безопасности. См. детальный гайд: **[Corporate Laptop Setup Guide](../testing/examples/corporate_laptop_setup.md)**
+
+#### Quick Fixes
+
+**Проблема: Permission Denied в системных директориях**
+```bash
+# Используйте только домашнюю директорию
+export OUT_DIR="$HOME/.digest-out"
+export STATE_DIR="$HOME/.digest-state"
+export TMPDIR="$HOME/.digest-temp"
+mkdir -p "$OUT_DIR" "$STATE_DIR" "$TMPDIR"
+```
+
+**Проблема: Корпоративный CA сертификат**
+```bash
+# Получите корпоративный CA у IT
+mkdir -p ~/SummaryLLM/certs
+cp corporate-ca.pem ~/SummaryLLM/certs/
+
+# В config.yaml:
+# ews:
+#   verify_ca: "$HOME/SummaryLLM/certs/corporate-ca.pem"
+```
+
+**Проблема: Корпоративный прокси**
+```bash
+export http_proxy="http://proxy.company.com:8080"
+export https_proxy="http://proxy.company.com:8080"
+export no_proxy="localhost,127.0.0.1"
+
+git config --global http.proxy http://proxy.company.com:8080
+```
+
+**Проблема: Windows/WSL**
+```bash
+# Используйте WSL2 вместо нативного Windows
+wsl --install  # Требуется admin права один раз
+wsl
+cd /mnt/c/Users/YourName/SummaryLLM
+```
+
+### 11. Getting Help
+
+#### Quick Diagnostics
+
+Запустите диагностику окружения:
 
 ```bash
+# Новый comprehensive doctor скрипт
+./scripts/doctor.sh
+
+# Или legacy print_env
 ./scripts/print_env.sh
 ```
 
-This will show:
-- Python version and tools
-- Environment variables status
-- Network connectivity
-- Directory permissions
-- CA certificate status
+**Вывод doctor.sh покажет:**
+- ✓/✗ Python version and tools
+- ✓/✗ Environment variables status
+- ✓/✗ Network connectivity
+- ✓/✗ Directory permissions
+- ✓/✗ CA certificate status
+- ✓/✗ Virtual environment
+- ✓/✗ Dependencies
 
 #### Collect logs
 
 ```bash
-# Run with verbose logging
+# Автоматический сбор всей диагностики
+cd digest-core
+./scripts/collect_diagnostics.sh
+
+# Или вручную с verbose logging
 DIGEST_LOG_LEVEL=DEBUG python3 -m digest_core.cli --dry-run 2>&1 | tee debug.log
 
 # Check structured logs
@@ -295,9 +350,12 @@ cat debug.log | jq .
 
 #### Report issues
 
-When reporting issues, include:
-1. Output of `./scripts/print_env.sh`
-2. Relevant log files
+**Для E2E тестирования:** Следуйте [E2E Testing Guide](../testing/E2E_TESTING_GUIDE.md) и используйте шаблон из [Send Results](../../digest-core/docs/testing/SEND_RESULTS.md).
+
+**Для разработчиков:** Включите в issue:
+1. Output of `./scripts/doctor.sh`
+2. Архив диагностики (`diagnostics-*.tar.gz`)
 3. Configuration (without secrets)
-4. Error messages
+4. Error messages and stack traces
 5. Steps to reproduce
+6. OS and environment details

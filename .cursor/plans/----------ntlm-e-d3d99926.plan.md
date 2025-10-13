@@ -354,7 +354,9 @@ git pull
 ./scripts/setup.sh
 ```
 
-```
+
+
+````
 
 ### 4. Обновить install.sh аналогично
 
@@ -371,7 +373,7 @@ elif "$venv_path/bin/pip" install --trusted-host pypi.org --trusted-host files.p
 else
     print_error "Ошибка установки зависимостей"
 fi
-```
+````
 
 ## Файлы для изменения
 

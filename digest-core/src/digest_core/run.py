@@ -22,12 +22,13 @@ from digest_core.observability.metrics import MetricsCollector
 from digest_core.observability.healthz import start_health_server
 from digest_core.llm.schemas import Digest, EnhancedDigest
 from digest_core.hierarchical import HierarchicalProcessor
+from digest_core.evidence.citations import CitationBuilder, CitationValidator, enrich_item_with_citations
 
 
 logger = structlog.get_logger()
 
 
-def run_digest(from_date: str, sources: List[str], out: str, model: str, window: str, state: str | None) -> None:
+def run_digest(from_date: str, sources: List[str], out: str, model: str, window: str, state: str | None, validate_citations: bool = False) -> bool:
     """
     Run the complete digest pipeline.
     
@@ -36,6 +37,12 @@ def run_digest(from_date: str, sources: List[str], out: str, model: str, window:
         sources: List of source types to process (e.g., ["ews"])
         out: Output directory path
         model: LLM model identifier
+        window: Time window (calendar_day or rolling_24h)
+        state: State directory path override
+        validate_citations: If True, enforce citation validation
+    
+    Returns:
+        True if citations validation passed (or not enabled), False otherwise
     """
     # Generate trace ID for this run
     trace_id = str(uuid.uuid4())
@@ -93,7 +100,7 @@ def run_digest(from_date: str, sources: List[str], out: str, model: str, window:
                        artifact_age_hours=artifact_age_hours,
                        trace_id=trace_id)
             metrics.record_run_total("ok")
-            return
+            return True
         else:
             logger.info("Existing artifacts outside T-48h window, rebuilding",
                        digest_date=digest_date,
@@ -120,9 +127,15 @@ def run_digest(from_date: str, sources: List[str], out: str, model: str, window:
         # Step 2: Normalize messages
         logger.info("Starting message normalization", stage="normalize")
         normalizer = HTMLNormalizer()
-        quote_cleaner = QuoteCleaner()
+        quote_cleaner = QuoteCleaner(
+            keep_top_quote_head=config.email_cleaner.keep_top_quote_head,
+            config=config.email_cleaner
+        )
         
         normalized_messages = []
+        total_removed_chars = 0
+        total_removed_blocks = 0
+        
         for msg in messages:
             # HTML to text conversion
             text_body = normalizer.html_to_text(msg.text_body)
@@ -130,8 +143,19 @@ def run_digest(from_date: str, sources: List[str], out: str, model: str, window:
             # Truncate large bodies (200KB limit)
             text_body = normalizer.truncate_text(text_body, max_bytes=200000)
             
-            # Clean quotes and signatures
-            cleaned_body = quote_cleaner.clean_quotes(text_body)
+            # Clean quotes and signatures with span tracking (new extractive pipeline)
+            if config.email_cleaner.enabled:
+                cleaned_body, removed_spans = quote_cleaner.clean_email_body(text_body, lang="auto", policy="standard")
+                
+                # Record metrics
+                for span in removed_spans:
+                    span_chars = span.end - span.start
+                    total_removed_chars += span_chars
+                    total_removed_blocks += 1
+                    metrics.record_cleaner_removed_chars(span_chars, span.type)
+                    metrics.record_cleaner_removed_blocks(1, span.type)
+            else:
+                cleaned_body = text_body
             
             # Create normalized message
             normalized_msg = msg._replace(
@@ -140,7 +164,17 @@ def run_digest(from_date: str, sources: List[str], out: str, model: str, window:
             )
             normalized_messages.append(normalized_msg)
         
-        logger.info("Message normalization completed", messages_normalized=len(normalized_messages))
+        logger.info("Message normalization completed", 
+                   messages_normalized=len(normalized_messages),
+                   total_removed_chars=total_removed_chars,
+                   total_removed_blocks=total_removed_blocks)
+        
+        # Build normalized messages map for citation tracking
+        normalized_messages_map = {
+            msg.msg_id: msg.text_body
+            for msg in normalized_messages
+        }
+        logger.info("Built normalized messages map", map_size=len(normalized_messages_map))
         
         # Step 3: Build conversation threads
         logger.info("Starting thread building", stage="threads")
@@ -318,6 +352,72 @@ def run_digest(from_date: str, sources: List[str], out: str, model: str, window:
             except Exception:
                 pass
         
+        # Step 6.5: Enrich with citations (extractive traceability)
+        logger.info("Starting citation enrichment", stage="citations")
+        citation_builder = CitationBuilder(normalized_messages_map)
+        citation_validation_passed = True
+        
+        # Enrich all digest items with citations
+        all_items = []
+        if use_hierarchical:
+            all_items.extend(digest_data.my_actions)
+            all_items.extend(digest_data.others_actions)
+            all_items.extend(digest_data.deadlines_meetings)
+            all_items.extend(digest_data.risks_blockers)
+            all_items.extend(digest_data.fyi)
+        else:
+            for section in digest_data.sections:
+                all_items.extend(section.items)
+        
+        for item in all_items:
+            enrich_item_with_citations(item, evidence_chunks, citation_builder)
+            # Record metric for citations per item
+            metrics.record_citations_per_item(len(item.citations))
+        
+        logger.info("Citation enrichment completed", 
+                   total_items=len(all_items),
+                   total_citations=sum(len(item.citations) for item in all_items))
+        
+        # Validate citations if requested
+        if validate_citations:
+            logger.info("Starting citation validation")
+            citation_validator = CitationValidator(normalized_messages_map)
+            
+            # Collect all citations
+            all_citations = []
+            for item in all_items:
+                all_citations.extend(item.citations)
+            
+            # Run validation
+            citation_validation_passed = citation_validator.validate_citations(
+                all_citations, 
+                strict=False  # Collect all errors, not just first
+            )
+            
+            if not citation_validation_passed:
+                logger.error("Citation validation failed",
+                           errors=len(citation_validator.validation_errors),
+                           error_details=citation_validator.validation_errors[:10])  # Log first 10 errors
+                
+                # Record validation failures
+                for error_info in citation_validator.validation_errors:
+                    # Extract failure type from error message
+                    error_msg = error_info.get('error', '')
+                    if 'offset' in error_msg.lower():
+                        failure_type = 'offset_invalid'
+                    elif 'checksum' in error_msg.lower():
+                        failure_type = 'checksum_mismatch'
+                    elif 'not found' in error_msg.lower():
+                        failure_type = 'not_found'
+                    elif 'preview mismatch' in error_msg.lower():
+                        failure_type = 'preview_mismatch'
+                    else:
+                        failure_type = 'other'
+                    
+                    metrics.record_citation_validation_failure(failure_type)
+            else:
+                logger.info("Citation validation passed", total_citations=len(all_citations))
+        
         # Step 7: Assemble outputs
         logger.info("Starting output assembly", stage="assemble")
         output_dir.mkdir(parents=True, exist_ok=True)
@@ -350,12 +450,24 @@ def run_digest(from_date: str, sources: List[str], out: str, model: str, window:
         metrics.record_run_total("ok")
         metrics.record_digest_build_time()
         
+        # Calculate total items for logging
+        if use_hierarchical:
+            total_items = (len(digest_data.my_actions) + len(digest_data.others_actions) + 
+                          len(digest_data.deadlines_meetings) + len(digest_data.risks_blockers) + 
+                          len(digest_data.fyi))
+        else:
+            total_items = sum(len(section.items) for section in digest_data.sections)
+        
         logger.info(
             "Digest run completed successfully",
             trace_id=trace_id,
             digest_date=digest_date,
-            total_items=sum(len(section.items) for section in digest_data.sections)
+            total_items=total_items,
+            citations_validated=validate_citations,
+            validation_passed=citation_validation_passed if validate_citations else None
         )
+        
+        return citation_validation_passed
         
     except Exception as e:
         logger.error(
@@ -368,7 +480,7 @@ def run_digest(from_date: str, sources: List[str], out: str, model: str, window:
         raise
 
 
-def run_digest_dry_run(from_date: str, sources: List[str], out: str, model: str, window: str, state: str | None) -> None:
+def run_digest_dry_run(from_date: str, sources: List[str], out: str, model: str, window: str, state: str | None, validate_citations: bool = False) -> None:
     """
     Run digest pipeline in dry-run mode (ingest+normalize only, no LLM/assemble).
     
@@ -377,6 +489,9 @@ def run_digest_dry_run(from_date: str, sources: List[str], out: str, model: str,
         sources: List of source types to process (e.g., ["ews"])
         out: Output directory path
         model: LLM model identifier (not used in dry-run)
+        window: Time window (calendar_day or rolling_24h)
+        state: State directory path override
+        validate_citations: Not used in dry-run mode
     """
     # Generate trace ID for this run
     trace_id = str(uuid.uuid4())
@@ -439,9 +554,15 @@ def run_digest_dry_run(from_date: str, sources: List[str], out: str, model: str,
         # Step 2: Normalize messages
         logger.info("Starting message normalization", stage="normalize")
         normalizer = HTMLNormalizer()
-        quote_cleaner = QuoteCleaner()
+        quote_cleaner = QuoteCleaner(
+            keep_top_quote_head=config.email_cleaner.keep_top_quote_head,
+            config=config.email_cleaner
+        )
         
         normalized_messages = []
+        total_removed_chars = 0
+        total_removed_blocks = 0
+        
         for msg in messages:
             # HTML to text conversion
             text_body = normalizer.html_to_text(msg.text_body)
@@ -449,8 +570,19 @@ def run_digest_dry_run(from_date: str, sources: List[str], out: str, model: str,
             # Truncate large bodies (200KB limit)
             text_body = normalizer.truncate_text(text_body, max_bytes=200000)
             
-            # Clean quotes and signatures
-            cleaned_body = quote_cleaner.clean_quotes(text_body)
+            # Clean quotes and signatures with span tracking (new extractive pipeline)
+            if config.email_cleaner.enabled:
+                cleaned_body, removed_spans = quote_cleaner.clean_email_body(text_body, lang="auto", policy="standard")
+                
+                # Record metrics
+                for span in removed_spans:
+                    span_chars = span.end - span.start
+                    total_removed_chars += span_chars
+                    total_removed_blocks += 1
+                    metrics.record_cleaner_removed_chars(span_chars, span.type)
+                    metrics.record_cleaner_removed_blocks(1, span.type)
+            else:
+                cleaned_body = text_body
             
             # Create normalized message
             normalized_msg = msg._replace(
@@ -459,7 +591,10 @@ def run_digest_dry_run(from_date: str, sources: List[str], out: str, model: str,
             )
             normalized_messages.append(normalized_msg)
         
-        logger.info("Message normalization completed", messages_normalized=len(normalized_messages))
+        logger.info("Message normalization completed", 
+                   messages_normalized=len(normalized_messages),
+                   total_removed_chars=total_removed_chars,
+                   total_removed_blocks=total_removed_blocks)
         
         # Step 3: Build conversation threads
         logger.info("Starting thread building", stage="threads")

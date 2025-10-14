@@ -118,6 +118,43 @@ class MetricsCollector:
             ['error_type', 'stage'],  # validation_error, llm_error, etc.
             registry=self.registry
         )
+        
+        # Email cleaner metrics
+        self.email_cleaner_removed_chars_total = Counter(
+            'email_cleaner_removed_chars_total',
+            'Total characters removed by email cleaner',
+            ['removal_type'],  # quoted, signature, disclaimer, autoresponse
+            registry=self.registry
+        )
+        
+        self.email_cleaner_removed_blocks_total = Counter(
+            'email_cleaner_removed_blocks_total',
+            'Total text blocks removed by email cleaner',
+            ['removal_type'],  # quoted, signature, disclaimer, autoresponse
+            registry=self.registry
+        )
+        
+        self.cleaner_errors_total = Counter(
+            'cleaner_errors_total',
+            'Total email cleaner errors',
+            ['error_type'],  # regex_error, parse_error, etc.
+            registry=self.registry
+        )
+        
+        # Citation metrics
+        self.citations_per_item_histogram = Histogram(
+            'citations_per_item_histogram',
+            'Number of citations per digest item',
+            buckets=[0, 1, 2, 3, 5, 10],
+            registry=self.registry
+        )
+        
+        self.citation_validation_failures_total = Counter(
+            'citation_validation_failures_total',
+            'Total citation validation failures',
+            ['failure_type'],  # offset_invalid, checksum_mismatch, not_found, etc.
+            registry=self.registry
+        )
     
     def record_llm_latency(self, latency_ms: float):
         """Record LLM request latency."""
@@ -166,6 +203,31 @@ class MetricsCollector:
         self.errors_total.labels(error_type=error_type, stage=stage).inc()
         logger.debug("Recorded error", error_type=error_type, stage=stage)
     
+    def record_cleaner_removed_chars(self, char_count: int, removal_type: str):
+        """Record characters removed by email cleaner."""
+        self.email_cleaner_removed_chars_total.labels(removal_type=removal_type).inc(char_count)
+        logger.debug("Recorded cleaner removed chars", char_count=char_count, removal_type=removal_type)
+    
+    def record_cleaner_removed_blocks(self, block_count: int, removal_type: str):
+        """Record blocks removed by email cleaner."""
+        self.email_cleaner_removed_blocks_total.labels(removal_type=removal_type).inc(block_count)
+        logger.debug("Recorded cleaner removed blocks", block_count=block_count, removal_type=removal_type)
+    
+    def record_cleaner_error(self, error_type: str):
+        """Record email cleaner error."""
+        self.cleaner_errors_total.labels(error_type=error_type).inc()
+        logger.debug("Recorded cleaner error", error_type=error_type)
+    
+    def record_citations_per_item(self, citation_count: int):
+        """Record number of citations per digest item."""
+        self.citations_per_item_histogram.observe(citation_count)
+        logger.debug("Recorded citations per item", citation_count=citation_count)
+    
+    def record_citation_validation_failure(self, failure_type: str):
+        """Record citation validation failure."""
+        self.citation_validation_failures_total.labels(failure_type=failure_type).inc()
+        logger.debug("Recorded citation validation failure", failure_type=failure_type)
+    
     def update_system_metrics(self):
         """Update system metrics."""
         uptime = time.time() - self.start_time
@@ -197,7 +259,12 @@ class MetricsCollector:
                 'evidence_chunks_total',
                 'threads_total',
                 'pipeline_stage_duration',
-                'errors_total'
+                'errors_total',
+                'email_cleaner_removed_chars_total',
+                'email_cleaner_removed_blocks_total',
+                'cleaner_errors_total',
+                'citations_per_item_histogram',
+                'citation_validation_failures_total'
             ]
         }
     

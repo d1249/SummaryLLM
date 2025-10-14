@@ -153,6 +153,40 @@ class ShrinkConfig(BaseModel):
     preserve_min_quotas: bool = Field(default=True, description="Preserve minimum bucket quotas during shrink")
 
 
+class EmailCleanerConfig(BaseModel):
+    """Configuration for email body cleaning (quotes, signatures, disclaimers)."""
+    enabled: bool = Field(default=True, description="Enable email body cleaning")
+    keep_top_quote_head: bool = Field(default=True, description="Keep 1-2 paragraphs from top-level quote")
+    max_top_quote_paragraphs: int = Field(default=2, description="Max paragraphs to keep from top quote")
+    max_top_quote_lines: int = Field(default=10, description="Max lines to keep from top quote")
+    max_quote_removal_length: int = Field(default=10000, description="Max chars to remove in single quote block (safety limit)")
+    
+    locales: List[str] = Field(default=["ru", "en"], description="Supported locales for pattern matching")
+    
+    # Pattern whitelists (regexes that should NOT be removed even if in quoted/signature area)
+    whitelist_patterns: List[str] = Field(
+        default_factory=lambda: [
+            r'\b(deadline|срок|дедлайн|до)\s+\d{1,2}[./]\d{1,2}',  # Deadlines
+            r'\b(approve|одобр|согласов)',  # Approval requests
+        ],
+        description="Patterns to preserve even in quoted areas"
+    )
+    
+    # Pattern blacklists (additional patterns to aggressively remove)
+    blacklist_patterns: List[str] = Field(
+        default_factory=lambda: [
+            r'Click here to unsubscribe',
+            r'Нажмите.*отписаться',
+            r'Privacy Policy',
+            r'Политика конфиденциальности',
+        ],
+        description="Additional patterns to remove aggressively"
+    )
+    
+    # Track removed spans for offset mapping
+    track_removed_spans: bool = Field(default=True, description="Track removed text spans for offset mapping")
+
+
 class HierarchicalConfig(BaseModel):
     """Configuration for hierarchical digest mode."""
     enable: bool = Field(default=True, description="Enable hierarchical mode")
@@ -185,6 +219,7 @@ class Config(BaseSettings):
     chunking: ChunkingConfig = Field(default_factory=ChunkingConfig)
     shrink: ShrinkConfig = Field(default_factory=ShrinkConfig)
     hierarchical: HierarchicalConfig = Field(default_factory=HierarchicalConfig)
+    email_cleaner: EmailCleanerConfig = Field(default_factory=EmailCleanerConfig)
     
     class Config:
         env_file = ".env"
@@ -284,6 +319,8 @@ class Config(BaseSettings):
             self.shrink = ShrinkConfig(**yaml_config['shrink'])
         if 'hierarchical' in yaml_config:
             self.hierarchical = HierarchicalConfig(**yaml_config['hierarchical'])
+        if 'email_cleaner' in yaml_config:
+            self.email_cleaner = EmailCleanerConfig(**yaml_config['email_cleaner'])
     
     def _get_env_value_for_key(self, key: str) -> str:
         """Get environment variable value for a given config key."""

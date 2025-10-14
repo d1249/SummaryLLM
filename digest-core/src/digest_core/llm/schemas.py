@@ -1,6 +1,25 @@
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
 
+
+# Citation model for extractive traceability
+class Citation(BaseModel):
+    """
+    Citation with validated offsets into normalized email body.
+    
+    Offsets are calculated AFTER:
+    1. HTML→text normalization
+    2. Email cleaner (quote/signature removal)
+    
+    This ensures stable offsets for evidence extraction.
+    """
+    msg_id: str = Field(description="Message ID reference")
+    start: int = Field(ge=0, description="Start offset in normalized text")
+    end: int = Field(gt=0, description="End offset in normalized text")
+    preview: str = Field(max_length=200, description="Text preview text[start:end] for validation")
+    checksum: Optional[str] = Field(None, description="SHA-256 of normalized email body for integrity check")
+
+
 # Legacy v1 models
 class Item(BaseModel):
     title: str
@@ -10,6 +29,7 @@ class Item(BaseModel):
     confidence: float
     source_ref: Dict[str, Any]
     email_subject: Optional[str] = Field(default=None)
+    citations: List[Citation] = Field(default_factory=list, description="Evidence citations with validated offsets")
 
 class Section(BaseModel):
     title: str
@@ -39,6 +59,7 @@ class ActionItem(BaseModel):
     confidence: str = Field(description="High/Medium/Low")
     response_channel: Optional[str] = Field(None, description="email/slack/meeting")
     email_subject: Optional[str] = Field(default=None)
+    citations: List[Citation] = Field(default_factory=list, description="Evidence citations with validated offsets")
 
 
 class DeadlineMeeting(BaseModel):
@@ -51,6 +72,7 @@ class DeadlineMeeting(BaseModel):
     location: Optional[str] = None
     participants: List[str] = Field(default_factory=list)
     email_subject: Optional[str] = Field(default=None)
+    citations: List[Citation] = Field(default_factory=list, description="Evidence citations with validated offsets")
 
 
 class RiskBlocker(BaseModel):
@@ -61,6 +83,7 @@ class RiskBlocker(BaseModel):
     severity: str = Field(description="High/Medium/Low")
     impact: str
     email_subject: Optional[str] = Field(default=None)
+    citations: List[Citation] = Field(default_factory=list, description="Evidence citations with validated offsets")
 
 
 class FYIItem(BaseModel):
@@ -70,6 +93,7 @@ class FYIItem(BaseModel):
     quote: str
     category: Optional[str] = None
     email_subject: Optional[str] = Field(default=None)
+    citations: List[Citation] = Field(default_factory=list, description="Evidence citations with validated offsets")
 
 
 class EnhancedDigest(BaseModel):
@@ -102,6 +126,7 @@ class ThreadAction(BaseModel):
     evidence_id: str = Field(description="Evidence ID reference")
     quote: str = Field(min_length=10, max_length=300, description="Short quote from evidence (up to 300 chars)")
     who_must_act: str = Field(description="user/sender/team")
+    citations: List[Citation] = Field(default_factory=list, description="Evidence citations with validated offsets")
 
 
 class ThreadDeadline(BaseModel):
@@ -110,6 +135,7 @@ class ThreadDeadline(BaseModel):
     date_time: str = Field(description="ISO-8601 datetime")
     evidence_id: str = Field(description="Evidence ID reference")
     quote: str = Field(min_length=10, max_length=150, description="Short quote from evidence")
+    citations: List[Citation] = Field(default_factory=list, description="Evidence citations with validated offsets")
 
 
 class ThreadSummary(BaseModel):

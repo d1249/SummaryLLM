@@ -2,23 +2,38 @@
 Quote and signature cleaning for email normalization.
 """
 import re
+from typing import List, Dict, Tuple, Optional
+from dataclasses import dataclass
 import structlog
 
 logger = structlog.get_logger()
 
 
+@dataclass
+class RemovedSpan:
+    """Represents a removed text span for offset tracking."""
+    type: str  # "quoted", "signature", "disclaimer", "autoresponse"
+    start: int  # Original start offset
+    end: int    # Original end offset
+    content: str  # Removed content (for debugging)
+    confidence: float = 1.0  # Confidence in removal decision
+
+
 class QuoteCleaner:
     """Clean quotes, signatures, and disclaimers from email content."""
     
-    def __init__(self, keep_top_quote_head: bool = True):
+    def __init__(self, keep_top_quote_head: bool = True, config=None):
         """
         Initialize QuoteCleaner.
         
         Args:
             keep_top_quote_head: If True, keep 1-2 paragraphs from the top-level quote
                                  to preserve inline replies and context.
+            config: EmailCleanerConfig instance (optional)
         """
         self.keep_top_quote_head = keep_top_quote_head
+        self.config = config
+        self.removed_spans: List[RemovedSpan] = []  # Track removed spans
         
         # Quote markers in different languages and formats
         self.quote_markers = [
@@ -60,22 +75,112 @@ class QuoteCleaner:
             r'Microsoft Outlook',
         ]
         
-        # Disclaimer patterns
+        # Disclaimer patterns (extended for RU/EN)
         self.disclaimer_patterns = [
-            r'DISCLAIMER.*?$',
-            r'LEGAL NOTICE.*?$',
-            r'CONFIDENTIALITY.*?$',
-            r'This email originated from.*?$',
-            r'This message is confidential.*?$',
+            r'DISCLAIMER.*',
+            r'LEGAL NOTICE.*',
+            r'CONFIDENTIALITY.*',
+            r'КОНФИДЕНЦИАЛЬНОСТЬ.*',
+            r'This email originated from.*',
+            r'This message is confidential.*',
+            r'Это письмо является конфиденциальным.*',
+            r'This email and any attachments.*',
+            r'The information contained in this.*',
+            r'If you are not the intended recipient.*',
+            r'Если вы не являетесь адресатом.*',
+            r'Please consider the environment.*',
+            r'Пожалуйста, подумайте об экологии.*',
+            r'Click here to unsubscribe.*',
+            r'Нажмите здесь.*отписаться.*',
+            r'Unsubscribe.*',
+            r'Отписаться.*',
+            r'Privacy Policy.*',
+            r'Политика конфиденциальности.*',
+        ]
+        
+        # Autoresponse patterns (Out of Office, auto-replies)
+        self.autoresponse_patterns = [
+            r'^Out of Office.*',
+            r'^Автоответ.*',
+            r'^Automatic reply.*',
+            r'^Автоматический ответ.*',
+            r'I am currently out of office.*',
+            r'Я сейчас в отпуске.*',
+            r'I will be unavailable.*',
+            r'Меня не будет.*',
+            r'Delivery Status Notification.*',
+            r'Уведомление о доставке.*',
+            r'Mail Delivery System.*',
+            r'This is an automatically generated.*',
+            r'Это автоматически сгенерированное.*',
         ]
         
         # Compile patterns
         self.quote_regex = re.compile('|'.join(self.quote_markers), re.MULTILINE | re.IGNORECASE)
         self.signature_regex = re.compile('|'.join(self.signature_patterns), re.MULTILINE | re.IGNORECASE)
-        self.disclaimer_regex = re.compile('|'.join(self.disclaimer_patterns), re.MULTILINE | re.IGNORECASE | re.DOTALL)
+        self.disclaimer_regex = re.compile('|'.join(self.disclaimer_patterns), re.MULTILINE | re.IGNORECASE)
+        self.autoresponse_regex = re.compile('|'.join(self.autoresponse_patterns), re.MULTILINE | re.IGNORECASE)
+    
+    def clean_email_body(self, text: str, lang: str = "auto", policy: str = "standard") -> Tuple[str, List[RemovedSpan]]:
+        """
+        Clean email body with span tracking (new extractive pipeline API).
+        
+        Args:
+            text: Raw email text to clean
+            lang: Language hint ("ru", "en", "auto")
+            policy: Cleaning policy ("standard", "aggressive", "conservative")
+        
+        Returns:
+            Tuple of (cleaned_text, removed_spans)
+        """
+        if not text:
+            return text, []
+        
+        # Reset removed spans for this call
+        self.removed_spans = []
+        
+        # Check if cleaning is enabled
+        if self.config and not self.config.enabled:
+            return text, []
+        
+        try:
+            cleaned_text = text
+            current_offset = 0  # Track offset shifts after removals
+            
+            # Stage 1: Remove autoresponses (highest priority)
+            cleaned_text, current_offset = self._remove_autoresponses(cleaned_text, current_offset)
+            
+            # Stage 2: Remove disclaimers
+            cleaned_text, current_offset = self._remove_disclaimers(cleaned_text, current_offset)
+            
+            # Stage 3: Remove signatures
+            cleaned_text, current_offset = self._remove_signatures(cleaned_text, current_offset)
+            
+            # Stage 4: Remove quotes (with optional top-quote preservation)
+            cleaned_text, current_offset = self._remove_quotes_with_spans(cleaned_text, current_offset)
+            
+            # Stage 5: Apply blacklist patterns from config
+            if self.config and self.config.blacklist_patterns:
+                cleaned_text, current_offset = self._remove_blacklist_patterns(cleaned_text, current_offset)
+            
+            # Stage 6: Clean up extra whitespace
+            cleaned_text = self._clean_whitespace(cleaned_text)
+            
+            logger.info("Email body cleaned",
+                       original_length=len(text),
+                       cleaned_length=len(cleaned_text),
+                       removed_spans=len(self.removed_spans),
+                       removal_rate=1.0 - (len(cleaned_text) / len(text)) if len(text) > 0 else 0)
+            
+            return cleaned_text, self.removed_spans
+            
+        except Exception as e:
+            logger.error("Email cleaning failed", error=str(e), exc_info=True)
+            # Return original text on error
+            return text, []
     
     def clean_quotes(self, text: str) -> str:
-        """Remove quotes, signatures, and disclaimers from email text."""
+        """Remove quotes, signatures, and disclaimers from email text (legacy API)."""
         if not text:
             return text
         
@@ -434,3 +539,170 @@ class QuoteCleaner:
             main_lines.pop()
         
         return '\n'.join(main_lines)
+    
+    def _remove_autoresponses(self, text: str, offset: int) -> Tuple[str, int]:
+        """Remove autoresponse blocks and track spans."""
+        cleaned = text
+        
+        for match in self.autoresponse_regex.finditer(text):
+            start, end = match.span()
+            removed_content = match.group()
+            
+            # Check safety limit
+            if self.config and len(removed_content) > self.config.max_quote_removal_length:
+                logger.warning("Autoresponse block too large, skipping", size=len(removed_content))
+                continue
+            
+            # Record removed span
+            span = RemovedSpan(
+                type="autoresponse",
+                start=start,
+                end=end,
+                content=removed_content[:200],  # Truncate for logging
+                confidence=0.95
+            )
+            self.removed_spans.append(span)
+            
+            # Remove from text
+            cleaned = cleaned.replace(removed_content, '', 1)
+        
+        return cleaned, offset
+    
+    def _remove_disclaimers(self, text: str, offset: int) -> Tuple[str, int]:
+        """Remove disclaimer blocks and track spans."""
+        cleaned = text
+        
+        for match in self.disclaimer_regex.finditer(text):
+            start, end = match.span()
+            removed_content = match.group()
+            
+            # Check safety limit
+            if self.config and len(removed_content) > self.config.max_quote_removal_length:
+                logger.warning("Disclaimer block too large, skipping", size=len(removed_content))
+                continue
+            
+            # Record removed span
+            span = RemovedSpan(
+                type="disclaimer",
+                start=start,
+                end=end,
+                content=removed_content[:200],
+                confidence=0.9
+            )
+            self.removed_spans.append(span)
+            
+            # Remove from text
+            cleaned = cleaned.replace(removed_content, '', 1)
+        
+        return cleaned, offset
+    
+    def _remove_signatures(self, text: str, offset: int) -> Tuple[str, int]:
+        """Remove signature blocks and track spans."""
+        cleaned = text
+        
+        for match in self.signature_regex.finditer(text):
+            start, end = match.span()
+            removed_content = match.group()
+            
+            # Record removed span
+            span = RemovedSpan(
+                type="signature",
+                start=start,
+                end=end,
+                content=removed_content[:100],
+                confidence=0.85
+            )
+            self.removed_spans.append(span)
+            
+            # Remove from text
+            cleaned = cleaned.replace(removed_content, '', 1)
+        
+        return cleaned, offset
+    
+    def _remove_quotes_with_spans(self, text: str, offset: int) -> Tuple[str, int]:
+        """Remove quoted blocks and track spans (preserves top quote if configured)."""
+        # Use existing _remove_quotes_recursive but track spans
+        lines = text.split('\n')
+        cleaned_lines = []
+        current_line_num = 0
+        in_quote = False
+        quote_start_line = 0
+        
+        for i, line in enumerate(lines):
+            quote_prefix_count = len(line) - len(line.lstrip('>'))
+            
+            # Check if this line is a quote
+            if quote_prefix_count > 0 or self.quote_regex.search(line):
+                if not in_quote:
+                    in_quote = True
+                    quote_start_line = i
+            else:
+                # End of quote block
+                if in_quote:
+                    # Record the quote span
+                    quote_lines = lines[quote_start_line:i]
+                    quote_content = '\n'.join(quote_lines)
+                    
+                    # Calculate character offset
+                    chars_before = sum(len(l) + 1 for l in lines[:quote_start_line])  # +1 for \n
+                    chars_quote = len(quote_content)
+                    
+                    # Check if we should keep top quote head
+                    if self.keep_top_quote_head and quote_start_line < 10:  # Top of email
+                        # Keep first 1-2 paragraphs
+                        para_count = quote_content.count('\n\n') + 1
+                        if para_count <= (self.config.max_top_quote_paragraphs if self.config else 2):
+                            # Keep this quote
+                            cleaned_lines.extend(quote_lines)
+                            in_quote = False
+                            continue
+                    
+                    # Remove quote
+                    span = RemovedSpan(
+                        type="quoted",
+                        start=chars_before,
+                        end=chars_before + chars_quote,
+                        content=quote_content[:200],
+                        confidence=0.88
+                    )
+                    self.removed_spans.append(span)
+                    in_quote = False
+                    
+                # Not in quote, keep line
+                cleaned_lines.append(line)
+        
+        return '\n'.join(cleaned_lines), offset
+    
+    def _remove_blacklist_patterns(self, text: str, offset: int) -> Tuple[str, int]:
+        """Remove blacklisted patterns from config."""
+        cleaned = text
+        
+        if not self.config or not self.config.blacklist_patterns:
+            return cleaned, offset
+        
+        for pattern in self.config.blacklist_patterns:
+            try:
+                regex = re.compile(pattern, re.IGNORECASE)
+                for match in regex.finditer(text):
+                    start, end = match.span()
+                    removed_content = match.group()
+                    
+                    span = RemovedSpan(
+                        type="blacklist",
+                        start=start,
+                        end=end,
+                        content=removed_content[:100],
+                        confidence=0.92
+                    )
+                    self.removed_spans.append(span)
+                    
+                    cleaned = cleaned.replace(removed_content, '', 1)
+            except re.error as e:
+                logger.error("Invalid blacklist pattern", pattern=pattern, error=str(e))
+                continue
+        
+        return cleaned, offset
+    
+    def get_removed_spans(self) -> List[RemovedSpan]:
+        """Get list of removed spans from last clean_email_body() call."""
+        return self.removed_spans

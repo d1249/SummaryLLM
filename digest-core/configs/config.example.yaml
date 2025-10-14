@@ -79,3 +79,22 @@ hierarchical:
   max_latency_increase_pct: 50  # Max acceptable latency increase %
   target_latency_increase_pct: 30  # Target latency increase %
   max_cost_increase_per_email_pct: 40  # Max acceptable cost increase per email %
+
+email_cleaner:
+  enabled: true             # Enable email body cleaning
+  keep_top_quote_head: true # Keep 1-2 paragraphs from top-level quote (inline replies)
+  max_top_quote_paragraphs: 2  # Max paragraphs to keep from top quote
+  max_top_quote_lines: 10   # Max lines to keep from top quote
+  max_quote_removal_length: 10000  # Safety limit: max chars to remove in single block
+  locales:                  # Supported locales for pattern matching
+    - ru
+    - en
+  whitelist_patterns:       # Patterns to preserve even in quoted areas
+    - '\b(deadline|срок|дедлайн|до)\s+\d{1,2}[./]\d{1,2}'  # Deadlines
+    - '\b(approve|одобр|согласов)'  # Approval requests
+  blacklist_patterns:       # Additional patterns to remove aggressively
+    - 'Click here to unsubscribe'
+    - 'Нажмите.*отписаться'
+    - 'Privacy Policy'
+    - 'Политика конфиденциальности'
+  track_removed_spans: true # Track removed text spans for offset mapping

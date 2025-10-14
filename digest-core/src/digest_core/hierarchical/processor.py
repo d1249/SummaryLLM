@@ -43,6 +43,9 @@ class HierarchicalProcessor:
         """
         Determine if hierarchical mode should be used.
         
+        Uses threshold_threads and threshold_emails for auto-activation.
+        Respects min_threads_to_summarize as minimum requirement.
+        
         Args:
             threads: List of conversation threads
             emails: List of email messages
@@ -50,11 +53,34 @@ class HierarchicalProcessor:
         Returns:
             True if hierarchical mode should be activated
         """
-        if not self.config.enable:
+        if not self.config.enable or not self.config.enable_auto:
             return False
         
-        return (len(threads) >= self.config.min_threads or 
-                len(emails) >= self.config.min_emails)
+        # Check if we meet minimum threads requirement
+        if len(threads) < self.config.min_threads_to_summarize:
+            logger.info(
+                "Hierarchical mode disabled: below min_threads_to_summarize",
+                threads=len(threads),
+                min_required=self.config.min_threads_to_summarize
+            )
+            return False
+        
+        # Check thresholds for auto-activation
+        meets_threshold = (
+            len(threads) >= self.config.threshold_threads or 
+            len(emails) >= self.config.threshold_emails
+        )
+        
+        if meets_threshold:
+            logger.info(
+                "Hierarchical mode activated",
+                threads=len(threads),
+                emails=len(emails),
+                threshold_threads=self.config.threshold_threads,
+                threshold_emails=self.config.threshold_emails
+            )
+        
+        return meets_threshold
     
     def process_hierarchical(
         self, 

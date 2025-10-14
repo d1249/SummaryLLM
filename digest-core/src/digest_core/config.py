@@ -106,6 +106,31 @@ class ObservabilityConfig(BaseModel):
     log_level: str = Field(default="INFO", description="Log level")
 
 
+class SelectionBucketsConfig(BaseModel):
+    """Configuration for balanced evidence selection buckets."""
+    threads_top: int = Field(default=10, description="Minimum threads to cover (1 chunk each)")
+    addressed_to_me: int = Field(default=8, description="Minimum chunks with AddressedToMe=true")
+    dates_deadlines: int = Field(default=6, description="Minimum chunks with dates/deadlines")
+    critical_senders: int = Field(default=4, description="Minimum chunks from sender_rank>=2")
+    per_thread_max: int = Field(default=3, description="Maximum chunks per thread")
+    max_total_chunks: int = Field(default=20, description="Maximum total chunks to select")
+
+
+class SelectionWeightsConfig(BaseModel):
+    """Feature weights for evidence chunk scoring."""
+    recency: float = Field(default=2.0, description="Weight for message recency (hours)")
+    addressed_to_me: float = Field(default=3.0, description="Weight for AddressedToMe flag")
+    action_verbs: float = Field(default=1.5, description="Weight per action verb found")
+    question_mark: float = Field(default=1.0, description="Weight for questions")
+    dates_found: float = Field(default=1.5, description="Weight per date/deadline found")
+    importance_high: float = Field(default=2.0, description="Weight for High importance")
+    is_flagged: float = Field(default=1.5, description="Weight for flagged messages")
+    has_doc_attachments: float = Field(default=1.0, description="Weight for doc/xlsx/pdf attachments")
+    sender_rank: float = Field(default=1.0, description="Weight multiplier per sender rank level")
+    thread_activity: float = Field(default=0.5, description="Weight for thread activity")
+    negative_prior: float = Field(default=-2.0, description="Penalty for noreply/unsubscribe patterns")
+
+
 class Config(BaseSettings):
     """Main configuration class."""
     
@@ -114,6 +139,8 @@ class Config(BaseSettings):
     ews: EWSConfig = Field(default_factory=EWSConfig)
     llm: LLMConfig = Field(default_factory=LLMConfig)
     observability: ObservabilityConfig = Field(default_factory=ObservabilityConfig)
+    selection_buckets: SelectionBucketsConfig = Field(default_factory=SelectionBucketsConfig)
+    selection_weights: SelectionWeightsConfig = Field(default_factory=SelectionWeightsConfig)
     
     class Config:
         env_file = ".env"
@@ -201,6 +228,10 @@ class Config(BaseSettings):
                         setattr(self.llm, key, value)
         if 'observability' in yaml_config:
             self.observability = ObservabilityConfig(**yaml_config['observability'])
+        if 'selection_buckets' in yaml_config:
+            self.selection_buckets = SelectionBucketsConfig(**yaml_config['selection_buckets'])
+        if 'selection_weights' in yaml_config:
+            self.selection_weights = SelectionWeightsConfig(**yaml_config['selection_weights'])
     
     def _get_env_value_for_key(self, key: str) -> str:
         """Get environment variable value for a given config key."""

@@ -28,3 +28,24 @@ llm:
 observability:
   prometheus_port: 9108
   log_level: "INFO"
+
+selection_buckets:
+  threads_top: 10           # Minimum threads to cover (1 chunk each)
+  addressed_to_me: 8        # Minimum chunks with AddressedToMe=true
+  dates_deadlines: 6        # Minimum chunks with dates/deadlines
+  critical_senders: 4       # Minimum chunks from sender_rank>=2
+  per_thread_max: 3         # Maximum chunks per thread
+  max_total_chunks: 20      # Maximum total chunks to select
+
+selection_weights:
+  recency: 2.0              # Weight for message recency
+  addressed_to_me: 3.0      # Weight for AddressedToMe flag
+  action_verbs: 1.5         # Weight per action verb found
+  question_mark: 1.0        # Weight for questions
+  dates_found: 1.5          # Weight per date/deadline found
+  importance_high: 2.0      # Weight for High importance
+  is_flagged: 1.5           # Weight for flagged messages
+  has_doc_attachments: 1.0  # Weight for doc/xlsx/pdf attachments
+  sender_rank: 1.0          # Weight multiplier per sender rank level
+  thread_activity: 0.5      # Weight for thread activity
+  negative_prior: -2.0      # Penalty for noreply/unsubscribe patterns

@@ -158,9 +158,15 @@ def run_digest(from_date: str, sources: List[str], out: str, model: str, window:
         
         # Step 5: Select relevant context
         logger.info("Starting context selection", stage="select")
-        context_selector = ContextSelector()
+        context_selector = ContextSelector(
+            buckets_config=config.selection_buckets,
+            weights_config=config.selection_weights
+        )
         selected_evidence = context_selector.select_context(evidence_chunks)
-        logger.info("Context selection completed", evidence_selected=len(selected_evidence))
+        selection_metrics = context_selector.get_metrics()
+        logger.info("Context selection completed", 
+                   evidence_selected=len(selected_evidence),
+                   **selection_metrics)
         
         # Step 6: Process with LLM
         logger.info("Starting LLM processing", stage="llm")
@@ -347,9 +353,15 @@ def run_digest_dry_run(from_date: str, sources: List[str], out: str, model: str,
         
         # Step 5: Select relevant context
         logger.info("Starting context selection", stage="select")
-        context_selector = ContextSelector()
+        context_selector = ContextSelector(
+            buckets_config=config.selection_buckets,
+            weights_config=config.selection_weights
+        )
         selected_evidence = context_selector.select_context(evidence_chunks)
-        logger.info("Context selection completed", evidence_selected=len(selected_evidence))
+        selection_metrics = context_selector.get_metrics()
+        logger.info("Context selection completed", 
+                   evidence_selected=len(selected_evidence),
+                   **selection_metrics)
         
         # Dry-run stops here - no LLM processing or assembly
         

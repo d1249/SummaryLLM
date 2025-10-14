@@ -1,6 +1,7 @@
 """
 Main digest pipeline runner.
 """
+import json
 import structlog
 from datetime import datetime, timezone
 from pathlib import Path
@@ -22,6 +23,7 @@ from digest_core.observability.metrics import MetricsCollector
 from digest_core.observability.healthz import start_health_server
 from digest_core.llm.schemas import Digest, EnhancedDigest
 from digest_core.hierarchical import HierarchicalProcessor
+from digest_core.llm.degrade import extractive_fallback
 
 
 logger = structlog.get_logger()
@@ -178,6 +180,54 @@ def run_digest(from_date: str, sources: List[str], out: str, model: str, window:
         logger.info("Context selection completed", 
                    evidence_selected=len(selected_evidence),
                    **selection_metrics)
+        
+        # Shortcut: Skip LLM if no evidence selected
+        if len(selected_evidence) == 0:
+            logger.warning("No evidence selected, skipping LLM and using extractive fallback",
+                          trace_id=trace_id,
+                          reason="no_evidence")
+            
+            # Use extractive fallback with all chunks (not just selected)
+            digest_data = extractive_fallback(
+                evidence_chunks=evidence_chunks,
+                digest_date=digest_date,
+                trace_id=trace_id,
+                reason="no_evidence"
+            )
+            
+            # Mark as partial
+            output_dir = Path(out)
+            output_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Write JSON with partial flag
+            json_path = output_dir / f"digest-{digest_date}.json"
+            digest_dict = digest_data.model_dump(exclude_none=True)
+            digest_dict['partial'] = True
+            digest_dict['reason'] = 'no_evidence'
+            json_path.write_text(
+                json.dumps(digest_dict, indent=2, ensure_ascii=False),
+                encoding='utf-8'
+            )
+            
+            # Write Markdown
+            markdown_assembler = MarkdownAssembler()
+            md_path = output_dir / f"digest-{digest_date}.md"
+            markdown_assembler.write_enhanced_digest(digest_data, md_path)
+            
+            logger.info("Output assembly completed (no evidence fallback)", 
+                       json_path=str(json_path), 
+                       md_path=str(md_path))
+            
+            metrics.record_run_total("ok")
+            metrics.record_digest_build_time()
+            
+            logger.info(
+                "Digest run completed with no evidence shortcut",
+                trace_id=trace_id,
+                digest_date=digest_date,
+                total_items=0
+            )
+            return
         
         # Step 6: Process with LLM
         logger.info("Starting LLM processing", stage="llm")

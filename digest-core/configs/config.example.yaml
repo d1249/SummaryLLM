@@ -14,6 +14,7 @@ ews:
   lookback_hours: 24
   page_size: 100
   sync_state_path: ".state/ews.syncstate"
+  user_aliases: ["alias1@corp-domain.ru", "alias2@corp-domain.ru"]
 
 llm:
   endpoint: "https://llm-gw.corp.com/api/v1/chat"

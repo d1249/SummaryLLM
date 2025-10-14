@@ -6,6 +6,7 @@ from typing import List, NamedTuple, Dict, Any
 import structlog
 
 from digest_core.threads.build import ConversationThread
+from digest_core.evidence import signals
 
 logger = structlog.get_logger()
 
@@ -18,16 +19,22 @@ class EvidenceChunk(NamedTuple):
     source_ref: Dict[str, Any]
     token_count: int
     priority_score: float
+    message_metadata: Dict[str, Any]  # from, to, cc, subject, received_at, importance, flag, attachments
+    addressed_to_me: bool
+    user_aliases_matched: List[str]
+    signals: Dict[str, Any]  # action_verbs, dates, contains_question, sender_rank, attachments
 
 
 class EvidenceSplitter:
     """Split conversation threads into evidence chunks for LLM processing."""
     
-    def __init__(self):
+    def __init__(self, user_aliases: List[str] = None, user_timezone: str = "Europe/Moscow"):
         self.max_tokens_per_chunk = 512
         self.min_tokens_per_chunk = 64
         self.max_chunks_per_message = 12
         self.max_total_tokens = 3000  # Total budget per LLM call
+        self.user_aliases = user_aliases or []
+        self.user_timezone = user_timezone
         
     def split_evidence(self, threads: List[ConversationThread]) -> List[EvidenceChunk]:
         """Split threads into evidence chunks."""
@@ -191,13 +198,54 @@ class EvidenceSplitter:
             "chunk_index": chunk_index
         }
         
+        # Build message metadata
+        message_metadata = {
+            "from": message.sender_email,
+            "to": message.to_recipients,
+            "cc": message.cc_recipients,
+            "subject": message.subject,
+            "received_at": signals.normalize_datetime_to_tz(message.datetime_received, self.user_timezone),
+            "importance": message.importance if hasattr(message, 'importance') else "Normal",
+            "is_flagged": message.is_flagged if hasattr(message, 'is_flagged') else False,
+            "has_attachments": message.has_attachments if hasattr(message, 'has_attachments') else False,
+            "attachment_types": message.attachment_types if hasattr(message, 'attachment_types') else []
+        }
+        
+        # Check if addressed to me
+        addressed_to_me = False
+        user_aliases_matched = []
+        all_recipients = message.to_recipients + message.cc_recipients
+        for alias in self.user_aliases:
+            alias_lower = alias.lower()
+            if alias_lower in [r.lower() for r in all_recipients]:
+                addressed_to_me = True
+                user_aliases_matched.append(alias)
+        
+        # Extract signals from content
+        action_verbs = signals.extract_action_verbs(content)
+        dates = signals.extract_dates(content)
+        has_question = signals.contains_question(content)
+        sender_rank = signals.calculate_sender_rank(message.sender_email)
+        
+        chunk_signals = {
+            "action_verbs": action_verbs,
+            "dates": dates,
+            "contains_question": has_question,
+            "sender_rank": sender_rank,
+            "attachments": message_metadata["attachment_types"]
+        }
+        
         return EvidenceChunk(
             evidence_id=evidence_id,
             conversation_id=conversation_id,
             content=content,
             source_ref=source_ref,
             token_count=token_count,
-            priority_score=priority_score
+            priority_score=priority_score,
+            message_metadata=message_metadata,
+            addressed_to_me=addressed_to_me,
+            user_aliases_matched=user_aliases_matched,
+            signals=chunk_signals
         )
     
     def _calculate_priority_score(self, content: str, message) -> float:

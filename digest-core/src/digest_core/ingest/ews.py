@@ -29,6 +29,10 @@ class NormalizedMessage(NamedTuple):
     text_body: str
     to_recipients: List[str]
     cc_recipients: List[str]
+    importance: str  # "Low" | "Normal" | "High"
+    is_flagged: bool
+    has_attachments: bool
+    attachment_types: List[str]  # ["pdf", "xlsx", ...]
 
 
 class EWSIngest:
@@ -388,6 +392,32 @@ class EWSIngest:
             # Convert to UTC
             datetime_received = datetime_received.astimezone(timezone.utc)
         
+        # Extract importance (Low, Normal, High)
+        importance = "Normal"
+        if hasattr(msg, 'importance') and msg.importance:
+            importance = str(msg.importance)
+        
+        # Extract flagged status
+        is_flagged = False
+        if hasattr(msg, 'is_flagged') and msg.is_flagged:
+            is_flagged = bool(msg.is_flagged)
+        
+        # Extract attachments
+        has_attachments = False
+        attachment_types = []
+        if hasattr(msg, 'has_attachments') and msg.has_attachments:
+            has_attachments = True
+            # Try to extract attachment types
+            if hasattr(msg, 'attachments') and msg.attachments:
+                for attachment in msg.attachments:
+                    if hasattr(attachment, 'name') and attachment.name:
+                        # Extract file extension
+                        name = str(attachment.name)
+                        if '.' in name:
+                            ext = name.rsplit('.', 1)[-1].lower()
+                            if ext and ext not in attachment_types:
+                                attachment_types.append(ext)
+        
         return NormalizedMessage(
             msg_id=msg_id,
             conversation_id=conversation_id,
@@ -396,7 +426,11 @@ class EWSIngest:
             subject=msg.subject or "",
             text_body=text_body,
             to_recipients=to_recipients,
-            cc_recipients=cc_recipients
+            cc_recipients=cc_recipients,
+            importance=importance,
+            is_flagged=is_flagged,
+            has_attachments=has_attachments,
+            attachment_types=attachment_types
         )
     
     def fetch_messages(self, digest_date: str, time_config: TimeConfig) -> List[NormalizedMessage]:

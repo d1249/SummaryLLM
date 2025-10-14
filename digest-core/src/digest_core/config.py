@@ -29,6 +29,7 @@ class EWSConfig(BaseModel):
     lookback_hours: int = Field(default=24, description="Hours to look back")
     page_size: int = Field(default=100, description="Page size for pagination")
     sync_state_path: str = Field(default=".state/ews.syncstate", description="Sync state file path")
+    user_aliases: List[str] = Field(default_factory=list, description="User email aliases for AddressedToMe detection")
     
     def __init__(self, **kwargs):
         # Читаем значения из переменных окружения если они не заданы

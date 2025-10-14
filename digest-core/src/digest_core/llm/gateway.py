@@ -73,11 +73,73 @@ class LLMGateway:
         return validated_response
     
     def _prepare_evidence_text(self, evidence: List[EvidenceChunk]) -> str:
-        """Prepare evidence text for LLM processing."""
+        """Prepare evidence text for LLM processing with rich metadata."""
         evidence_parts = []
         
         for i, chunk in enumerate(evidence):
-            part = f"Evidence {i+1} (ID: {chunk.evidence_id}):\n{chunk.content}\n"
+            # Extract metadata with safe defaults
+            metadata = chunk.message_metadata if hasattr(chunk, 'message_metadata') else {}
+            sender = metadata.get('from', 'N/A')
+            to_list = metadata.get('to', [])
+            cc_list = metadata.get('cc', [])
+            subject = metadata.get('subject', 'N/A')
+            received_at = metadata.get('received_at', 'N/A')
+            importance = metadata.get('importance', 'Normal')
+            is_flagged = metadata.get('is_flagged', False)
+            has_attachments = metadata.get('has_attachments', False)
+            attachment_types = metadata.get('attachment_types', [])
+            
+            # Format recipients
+            to_str = ', '.join(to_list[:3]) if to_list else 'N/A'
+            if len(to_list) > 3:
+                to_str += f' (+{len(to_list) - 3} more)'
+            
+            cc_str = ', '.join(cc_list[:3]) if cc_list else 'N/A'
+            if len(cc_list) > 3:
+                cc_str += f' (+{len(cc_list) - 3} more)'
+            
+            # Truncate subject if too long
+            subject_trunc = subject[:80] + '...' if len(subject) > 80 else subject
+            
+            # Format attachments
+            attachments_str = ', '.join(attachment_types) if attachment_types else 'none'
+            
+            # Extract AddressedToMe info
+            addressed_to_me = getattr(chunk, 'addressed_to_me', False)
+            aliases_matched = getattr(chunk, 'user_aliases_matched', [])
+            aliases_str = ', '.join(aliases_matched) if aliases_matched else 'none'
+            
+            # Extract signals
+            chunk_signals = getattr(chunk, 'signals', {})
+            action_verbs = chunk_signals.get('action_verbs', [])
+            dates = chunk_signals.get('dates', [])
+            contains_question = chunk_signals.get('contains_question', False)
+            sender_rank = chunk_signals.get('sender_rank', 1)
+            
+            # Format signals
+            action_verbs_str = ', '.join(action_verbs[:5]) if action_verbs else 'none'
+            if len(action_verbs) > 5:
+                action_verbs_str += f' (+{len(action_verbs) - 5})'
+            
+            dates_str = ', '.join(dates[:3]) if dates else 'none'
+            if len(dates) > 3:
+                dates_str += f' (+{len(dates) - 3})'
+            
+            # Get message_id and conversation_id from source_ref
+            msg_id = chunk.source_ref.get('msg_id', 'N/A')
+            conv_id = chunk.source_ref.get('conversation_id', 'N/A')
+            
+            # Build evidence header
+            part = f"""Evidence {i+1} (ID: {chunk.evidence_id}, Msg: {msg_id}, Thread: {conv_id})
+From: {sender} | To: {to_str} | Cc: {cc_str}
+Subject: {subject_trunc}
+ReceivedAt: {received_at} | Importance: {importance} | Flag: {is_flagged} | HasAttachments: {attachments_str}
+AddressedToMe: {addressed_to_me} (aliases: {aliases_str})
+Signals: action_verbs=[{action_verbs_str}]; dates=[{dates_str}]; contains_question={contains_question}; sender_rank={sender_rank}; attachments=[{attachments_str}]
+---
+{chunk.content}
+
+"""
             evidence_parts.append(part)
         
         return "\n".join(evidence_parts)

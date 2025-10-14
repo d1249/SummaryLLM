@@ -149,7 +149,10 @@ def run_digest(from_date: str, sources: List[str], out: str, model: str, window:
         
         # Step 4: Split into evidence chunks
         logger.info("Starting evidence splitting", stage="evidence")
-        evidence_splitter = EvidenceSplitter()
+        evidence_splitter = EvidenceSplitter(
+            user_aliases=config.ews.user_aliases,
+            user_timezone=config.time.user_timezone
+        )
         evidence_chunks = evidence_splitter.split_evidence(threads)
         logger.info("Evidence splitting completed", evidence_chunks=len(evidence_chunks))
         
@@ -335,7 +338,10 @@ def run_digest_dry_run(from_date: str, sources: List[str], out: str, model: str,
         
         # Step 4: Split into evidence chunks
         logger.info("Starting evidence splitting", stage="evidence")
-        evidence_splitter = EvidenceSplitter()
+        evidence_splitter = EvidenceSplitter(
+            user_aliases=config.ews.user_aliases,
+            user_timezone=config.time.user_timezone
+        )
         evidence_chunks = evidence_splitter.split_evidence(threads)
         logger.info("Evidence splitting completed", evidence_chunks=len(evidence_chunks))
         

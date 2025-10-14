@@ -159,7 +159,7 @@ class LLMGateway:
         ]
         
         # Make request with retry logic
-        response_data = self._make_request_with_retry(messages, trace_id)
+        response_data = self._make_request_with_retry(messages, trace_id, digest_date)
         
         # Validate response
         validated_response = self._validate_response(response_data.get("data", {}), evidence)
@@ -171,7 +171,7 @@ class LLMGateway:
                 logger.info("Quality retry: empty sections but positive signals present", trace_id=trace_id)
                 quality_hint = "\n\nIMPORTANT: If there are actionable requests or deadlines, return items accordingly. Return strict JSON per schema only."
                 messages[0]["content"] = messages[0]["content"] + quality_hint
-                response_data = self._make_request_with_retry(messages, trace_id)
+                response_data = self._make_request_with_retry(messages, trace_id, digest_date)
                 validated_response = self._validate_response(response_data.get("data", {}), evidence)
         
         logger.info("LLM action extraction completed", 
@@ -260,7 +260,7 @@ Signals: action_verbs=[{action_verbs_str}]; dates=[{dates_str}]; contains_questi
         wait=tenacity.wait_fixed(1),  # 1 second wait between retries
         retry=tenacity.retry_if_exception_type(ValueError)  # Only retry on JSON validation errors
     )
-    def _make_request_with_retry(self, messages: List[Dict[str, str]], trace_id: str) -> Dict[str, Any]:
+    def _make_request_with_retry(self, messages: List[Dict[str, str]], trace_id: str, digest_date: str = None) -> Dict[str, Any]:
         """Make request to LLM Gateway with retry logic for invalid JSON."""
         start_time = time.time()
         
@@ -537,7 +537,7 @@ Signals: action_verbs=[{action_verbs_str}]; dates=[{dates_str}]; contains_questi
         ]
         
         # Make request
-        response_data = self._make_request_with_retry(messages, trace_id)
+        response_data = self._make_request_with_retry(messages, trace_id, digest_date)
         
         # Extract markdown content
         content = response_data["data"].get("choices", [{}])[0].get("message", {}).get("content", "")
@@ -680,7 +680,7 @@ Signals: action_verbs=[{action_verbs_str}]; dates=[{dates_str}]; contains_questi
         ]
         
         # Call LLM with retry
-        response_data = self._make_request_with_retry(messages, trace_id)
+        response_data = self._make_request_with_retry(messages, trace_id, digest_date)
         
         # Parse response (JSON + optional Markdown)
         parsed = self._parse_enhanced_response(response_data.get("data", ""))

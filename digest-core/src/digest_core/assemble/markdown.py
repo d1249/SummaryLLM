@@ -44,76 +44,106 @@ class MarkdownAssembler:
         lines = []
         
         # Header
-        lines.append(f"# Дайджест действий - {digest_data.digest_date}")
+        digest_date = digest_data.get('digest_date', '') if isinstance(digest_data, dict) else getattr(digest_data, 'digest_date', '')
+        trace_id = digest_data.get('trace_id', '') if isinstance(digest_data, dict) else getattr(digest_data, 'trace_id', '')
+        lines.append(f"# Дайджест действий - {digest_date}")
         lines.append("")
-        lines.append(f"*Trace ID: {digest_data.trace_id}*")
+        lines.append(f"*Trace ID: {trace_id}*")
         lines.append("")
         
         # Check if digest is empty
-        total_items = sum(len(section.items) for section in digest_data.sections)
+        sections = digest_data.get('sections', []) if isinstance(digest_data, dict) else digest_data.sections
+        total_items = sum(len(section.get('items', []) if isinstance(section, dict) else section.items) for section in sections)
         if total_items == 0:
             lines.append("За период релевантных действий не найдено.")
             return "\n".join(lines)
-        
+
         # Sections
-        for section in digest_data.sections:
-            if not section.items:
+        for section in sections:
+            # Handle both object and dict formats
+            items = section.get('items', []) if isinstance(section, dict) else section.items
+            title = section.get('title', '') if isinstance(section, dict) else section.title
+
+            if not items:
                 continue
-            
-            lines.append(f"## {section.title}")
+
+            lines.append(f"## {title}")
             lines.append("")
-            
+
             # Limit items per section
-            items_to_show = section.items[:self.max_items_per_section]
-            
+            items_to_show = items[:self.max_items_per_section]
+
             for i, item in enumerate(items_to_show, 1):
-                lines.append(f"### {i}. {item.title}")
-                
-                # Add due date if present
-                if item.due:
-                    lines.append(f"**Срок:** {item.due}")
-                
-                # Add confidence
-                confidence_text = self._format_confidence(item.confidence)
-                lines.append(f"**Уверенность:** {confidence_text}")
-                
-                # Add evidence reference (required format) with email subject
-                source_type = item.source_ref.get('type', 'unknown')
-                if item.email_subject:
-                    lines.append(f"**Источник:** {source_type}, тема \"{item.email_subject}\", evidence {item.evidence_id}")
+                # Handle both object and dict formats
+                if isinstance(item, dict):
+                    item_title = item.get('title', '')
+                    item_due = item.get('due')
+                    item_confidence = item.get('confidence', 0)
+                    item_evidence_id = item.get('evidence_id', '')
+                    item_source_ref = item.get('source_ref', {})
+                    item_owners_masked = item.get('owners_masked', [])
+                    item_email_subject = item.get('email_subject')
                 else:
-                    lines.append(f"**Источник:** {source_type}, evidence {item.evidence_id}")
-                
+                    item_title = item.title
+                    item_due = item.due
+                    item_confidence = item.confidence
+                    item_evidence_id = item.evidence_id
+                    item_source_ref = item.source_ref
+                    item_owners_masked = item.owners_masked
+                    item_email_subject = getattr(item, 'email_subject', None)
+
+                lines.append(f"### {i}. {item_title}")
+
+                # Add due date if present
+                if item_due:
+                    lines.append(f"**Срок:** {item_due}")
+
+                # Add confidence
+                confidence_text = self._format_confidence(item_confidence)
+                lines.append(f"**Уверенность:** {confidence_text}")
+
+                # Add evidence reference (required format) with email subject
+                source_type = item_source_ref.get('type', 'unknown')
+                if item_email_subject:
+                    lines.append(f"**Источник:** {source_type}, тема \"{item_email_subject}\", evidence {item_evidence_id}")
+                else:
+                    lines.append(f"**Источник:** {source_type}, evidence {item_evidence_id}")
+
                 # Add owners if present
-                if item.owners_masked:
-                    owners_text = ", ".join(item.owners_masked)
+                if item_owners_masked:
+                    owners_text = ", ".join(item_owners_masked)
                     lines.append(f"**Ответственные:** {owners_text}")
-                
+
                 lines.append("")
-            
+
             # Add note if items were truncated
-            if len(section.items) > self.max_items_per_section:
-                remaining = len(section.items) - self.max_items_per_section
+            if len(items) > self.max_items_per_section:
+                remaining = len(items) - self.max_items_per_section
                 lines.append(f"*... и еще {remaining} элементов*")
                 lines.append("")
         
         # Statistics section
-        if digest_data.total_emails_processed > 0:
+        total_processed = digest_data.get('total_emails_processed', 0) if isinstance(digest_data, dict) else getattr(digest_data, 'total_emails_processed', 0)
+        emails_with_actions = digest_data.get('emails_with_actions', 0) if isinstance(digest_data, dict) else getattr(digest_data, 'emails_with_actions', 0)
+
+        if total_processed > 0:
             lines.append("## Статистика")
             lines.append("")
-            percent = int((digest_data.emails_with_actions / digest_data.total_emails_processed) * 100) if digest_data.total_emails_processed > 0 else 0
-            lines.append(f"Обработано {digest_data.total_emails_processed} писем, {digest_data.emails_with_actions} ({percent}%) содержали действия")
+            percent = int((emails_with_actions / total_processed) * 100) if total_processed > 0 else 0
+            lines.append(f"Обработано {total_processed} писем, {emails_with_actions} ({percent}%) содержали действия")
             lines.append("")
         
         # Evidence section
         lines.append("## Источники")
         lines.append("")
-        
+
         evidence_ids = set()
-        for section in digest_data.sections:
-            for item in section.items:
-                evidence_ids.add(item.evidence_id)
-        
+        for section in sections:
+            items = section.get('items', []) if isinstance(section, dict) else section.items
+            for item in items:
+                evidence_id = item.get('evidence_id', '') if isinstance(item, dict) else item.evidence_id
+                evidence_ids.add(evidence_id)
+
         for evidence_id in sorted(evidence_ids):
             lines.append(f"### Evidence {evidence_id}")
             lines.append(f"*ID: {evidence_id}*")
@@ -166,19 +196,22 @@ class MarkdownAssembler:
         
         return truncated_content
     
-    def generate_summary(self, digest_data: Digest) -> str:
+    def generate_summary(self, digest_data) -> str:
         """Generate a brief summary of the digest."""
-        total_items = sum(len(section.items) for section in digest_data.sections)
-        
+        sections = digest_data.get('sections', []) if isinstance(digest_data, dict) else digest_data.sections
+        total_items = sum(len(section.get('items', []) if isinstance(section, dict) else section.items) for section in sections)
+
         if total_items == 0:
             return "За период релевантных действий не найдено."
-        
+
         summary_parts = [f"Найдено {total_items} действий:"]
-        
-        for section in digest_data.sections:
-            if section.items:
-                summary_parts.append(f"- {section.title}: {len(section.items)}")
-        
+
+        for section in sections:
+            items = section.get('items', []) if isinstance(section, dict) else section.items
+            title = section.get('title', '') if isinstance(section, dict) else section.title
+            if items:
+                summary_parts.append(f"- {title}: {len(items)}")
+
         return " ".join(summary_parts)
     
     def validate_markdown(self, content: str) -> bool:
@@ -285,8 +318,9 @@ class MarkdownAssembler:
                 if action.response_channel:
                     lines.append(f"**Канал ответа:** {action.response_channel}")
                 # Add source with email subject
-                if action.email_subject:
-                    lines.append(f"**Источник:** тема \"{action.email_subject}\", evidence {action.evidence_id}")
+                email_subject = getattr(action, 'email_subject', None)
+                if email_subject:
+                    lines.append(f"**Источник:** тема \"{email_subject}\", evidence {action.evidence_id}")
                 else:
                     lines.append(f"**Источник:** Evidence {action.evidence_id}")
                 lines.append(f'**Цитата:** "{action.quote}"')
@@ -306,8 +340,9 @@ class MarkdownAssembler:
                 if action.actors:
                     lines.append(f"**Актёры:** {', '.join(action.actors)}")
                 # Add source with email subject
-                if action.email_subject:
-                    lines.append(f"**Источник:** тема \"{action.email_subject}\", evidence {action.evidence_id}")
+                email_subject = getattr(action, 'email_subject', None)
+                if email_subject:
+                    lines.append(f"**Источник:** тема \"{email_subject}\", evidence {action.evidence_id}")
                 else:
                     lines.append(f"**Источник:** Evidence {action.evidence_id}")
                 lines.append(f'**Цитата:** "{action.quote}"')
@@ -365,12 +400,20 @@ class MarkdownAssembler:
                 lines.append(f'**Цитата:** "{item.quote}"')
                 lines.append("")
         
-        # Statistics section
-        if digest.total_emails_processed > 0:
+        # Statistics section - get from model_dump if available
+        if hasattr(digest, 'model_dump'):
+            data_dict = digest.model_dump()
+        else:
+            data_dict = digest.__dict__ if hasattr(digest, '__dict__') else {}
+
+        total_processed = data_dict.get('total_emails_processed', 0)
+        emails_with_actions = data_dict.get('emails_with_actions', 0)
+
+        if total_processed > 0:
             lines.append("## Статистика")
             lines.append("")
-            percent = int((digest.emails_with_actions / digest.total_emails_processed) * 100) if digest.total_emails_processed > 0 else 0
-            lines.append(f"Обработано {digest.total_emails_processed} писем, {digest.emails_with_actions} ({percent}%) содержали действия")
+            percent = int((emails_with_actions / total_processed) * 100) if total_processed > 0 else 0
+            lines.append(f"Обработано {total_processed} писем, {emails_with_actions} ({percent}%) содержали действия")
             lines.append("")
         
         # Add markdown summary if present

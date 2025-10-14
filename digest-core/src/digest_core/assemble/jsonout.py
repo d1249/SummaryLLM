@@ -47,13 +47,11 @@ class JSONAssembler:
     
     def _digest_to_dict(self, digest_data: Digest) -> Dict[str, Any]:
         """Convert Digest object to dictionary with strict schema compliance."""
-        return {
+        result = {
             "schema_version": digest_data.schema_version,
             "prompt_version": digest_data.prompt_version,
             "digest_date": digest_data.digest_date,
             "trace_id": digest_data.trace_id,
-            "total_emails_processed": digest_data.total_emails_processed,
-            "emails_with_actions": digest_data.emails_with_actions,
             "sections": [
                 {
                     "title": section.title,
@@ -71,7 +69,9 @@ class JSONAssembler:
                     ]
                 }
                 for section in digest_data.sections
-            ]
+            ],
+            "total_emails_processed": getattr(digest_data, 'total_emails_processed', None),
+            "emails_with_actions": getattr(digest_data, 'emails_with_actions', None)
         }
     
     def read_digest(self, input_path: Path) -> Digest:

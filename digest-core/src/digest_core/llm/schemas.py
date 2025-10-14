@@ -9,7 +9,7 @@ class Item(BaseModel):
     evidence_id: str
     confidence: float
     source_ref: Dict[str, Any]
-    email_subject: Optional[str] = None
+    email_subject: Optional[str] = Field(default=None)
 
 class Section(BaseModel):
     title: str
@@ -21,8 +21,8 @@ class Digest(BaseModel):
     digest_date: str
     trace_id: str
     sections: List[Section]
-    total_emails_processed: int = 0
-    emails_with_actions: int = 0
+    total_emails_processed: int = Field(default=0)
+    emails_with_actions: int = Field(default=0)
 
 
 # Enhanced v2 models
@@ -38,7 +38,7 @@ class ActionItem(BaseModel):
     actors: List[str] = Field(default_factory=list, description="People involved")
     confidence: str = Field(description="High/Medium/Low")
     response_channel: Optional[str] = Field(None, description="email/slack/meeting")
-    email_subject: Optional[str] = None
+    email_subject: Optional[str] = Field(default=None)
 
 
 class DeadlineMeeting(BaseModel):
@@ -50,7 +50,7 @@ class DeadlineMeeting(BaseModel):
     date_label: Optional[str] = Field(None, description="'today'/'tomorrow' if applicable")
     location: Optional[str] = None
     participants: List[str] = Field(default_factory=list)
-    email_subject: Optional[str] = None
+    email_subject: Optional[str] = Field(default=None)
 
 
 class RiskBlocker(BaseModel):
@@ -60,7 +60,7 @@ class RiskBlocker(BaseModel):
     quote: str
     severity: str = Field(description="High/Medium/Low")
     impact: str
-    email_subject: Optional[str] = None
+    email_subject: Optional[str] = Field(default=None)
 
 
 class FYIItem(BaseModel):
@@ -69,30 +69,30 @@ class FYIItem(BaseModel):
     evidence_id: str
     quote: str
     category: Optional[str] = None
-    email_subject: Optional[str] = None
+    email_subject: Optional[str] = Field(default=None)
 
 
 class EnhancedDigest(BaseModel):
     """Enhanced digest with structured sections and evidence references."""
-    schema_version: str = Field(default="2.0")
+    schema_version: str = "2.0"
     prompt_version: str
     digest_date: str
     trace_id: str
-    timezone: str = Field(default="America/Sao_Paulo")
-    
+    timezone: str = "America/Sao_Paulo"
+
     # Structured sections
     my_actions: List[ActionItem] = Field(default_factory=list)
     others_actions: List[ActionItem] = Field(default_factory=list)
     deadlines_meetings: List[DeadlineMeeting] = Field(default_factory=list)
     risks_blockers: List[RiskBlocker] = Field(default_factory=list)
     fyi: List[FYIItem] = Field(default_factory=list)
-    
+
     # Markdown summary (generated after JSON)
-    markdown_summary: Optional[str] = Field(None, description="Brief markdown summary")
-    
+    markdown_summary: Optional[str] = None
+
     # Statistics
-    total_emails_processed: int = 0
-    emails_with_actions: int = 0
+    total_emails_processed: int = Field(default=0)
+    emails_with_actions: int = Field(default=0)
 
 
 # Hierarchical mode models

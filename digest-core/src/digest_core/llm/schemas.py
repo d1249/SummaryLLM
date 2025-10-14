@@ -82,3 +82,31 @@ class EnhancedDigest(BaseModel):
     
     # Markdown summary (generated after JSON)
     markdown_summary: Optional[str] = Field(None, description="Brief markdown summary")
+
+
+# Hierarchical mode models
+class ThreadAction(BaseModel):
+    """Action item from thread summary."""
+    title: str = Field(max_length=100, description="Brief action title")
+    evidence_id: str = Field(description="Evidence ID reference")
+    quote: str = Field(min_length=10, max_length=150, description="Short quote from evidence")
+    who_must_act: str = Field(description="user/sender/team")
+
+
+class ThreadDeadline(BaseModel):
+    """Deadline from thread summary."""
+    title: str = Field(description="Deadline title")
+    date_time: str = Field(description="ISO-8601 datetime")
+    evidence_id: str = Field(description="Evidence ID reference")
+    quote: str = Field(min_length=10, max_length=150, description="Short quote from evidence")
+
+
+class ThreadSummary(BaseModel):
+    """Per-thread mini-summary output."""
+    thread_id: str = Field(description="Thread/conversation ID")
+    summary: str = Field(max_length=300, description="Brief summary ≤90 tokens")
+    pending_actions: List[ThreadAction] = Field(default_factory=list, description="Actions from this thread")
+    deadlines: List[ThreadDeadline] = Field(default_factory=list, description="Deadlines from this thread")
+    who_must_act: List[str] = Field(default_factory=list, description="user/others")
+    open_questions: List[str] = Field(default_factory=list, description="Unresolved questions")
+    evidence_ids: List[str] = Field(default_factory=list, description="All evidence IDs in this thread")

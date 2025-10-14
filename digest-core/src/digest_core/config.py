@@ -153,6 +153,24 @@ class ShrinkConfig(BaseModel):
     preserve_min_quotas: bool = Field(default=True, description="Preserve minimum bucket quotas during shrink")
 
 
+class HierarchicalConfig(BaseModel):
+    """Configuration for hierarchical digest mode."""
+    enable: bool = Field(default=True, description="Enable hierarchical mode")
+    min_threads: int = Field(default=30, description="Min threads to activate")
+    min_emails: int = Field(default=150, description="Min emails to activate")
+    
+    per_thread_max_chunks_in: int = Field(default=8, description="Max chunks per thread for summarization")
+    summary_max_tokens: int = Field(default=90, description="Max tokens for thread summary")
+    parallel_pool: int = Field(default=8, description="Max parallel thread summarization workers")
+    timeout_sec: int = Field(default=20, description="Timeout per thread summarization")
+    degrade_on_timeout: str = Field(default="best_2_chunks", description="Degradation strategy on timeout")
+    
+    final_input_token_cap: int = Field(default=4000, description="Max tokens for final aggregator input")
+    max_latency_increase_pct: int = Field(default=50, description="Max acceptable latency increase %")
+    target_latency_increase_pct: int = Field(default=30, description="Target latency increase %")
+    max_cost_increase_per_email_pct: int = Field(default=40, description="Max acceptable cost increase per email %")
+
+
 class Config(BaseSettings):
     """Main configuration class."""
     
@@ -166,6 +184,7 @@ class Config(BaseSettings):
     context_budget: ContextBudgetConfig = Field(default_factory=ContextBudgetConfig)
     chunking: ChunkingConfig = Field(default_factory=ChunkingConfig)
     shrink: ShrinkConfig = Field(default_factory=ShrinkConfig)
+    hierarchical: HierarchicalConfig = Field(default_factory=HierarchicalConfig)
     
     class Config:
         env_file = ".env"
@@ -263,6 +282,8 @@ class Config(BaseSettings):
             self.chunking = ChunkingConfig(**yaml_config['chunking'])
         if 'shrink' in yaml_config:
             self.shrink = ShrinkConfig(**yaml_config['shrink'])
+        if 'hierarchical' in yaml_config:
+            self.hierarchical = HierarchicalConfig(**yaml_config['hierarchical'])
     
     def _get_env_value_for_key(self, key: str) -> str:
         """Get environment variable value for a given config key."""

@@ -421,7 +421,8 @@ Signals: action_verbs=[{action_verbs_str}]; dates=[{dates_str}]; contains_questi
         evidence: List[EvidenceChunk], 
         digest_date: str, 
         trace_id: str, 
-        prompt_version: str = "v2"
+        prompt_version: str = "v2",
+        custom_input: str = None
     ) -> Dict[str, Any]:
         """
         Process evidence with enhanced v2 prompt and validation.
@@ -431,17 +432,22 @@ Signals: action_verbs=[{action_verbs_str}]; dates=[{dates_str}]; contains_questi
             digest_date: Date of the digest
             trace_id: Trace ID for logging
             prompt_version: Version of prompt to use (default: "v2")
+            custom_input: Custom input text (for hierarchical mode, replaces evidence)
         
         Returns:
             Dict with digest, trace_id, and meta information
         """
         logger.info("Processing digest with enhanced prompt", 
-                   evidence_count=len(evidence),
+                   evidence_count=len(evidence) if not custom_input else 0,
+                   custom_input=bool(custom_input),
                    prompt_version=prompt_version,
                    trace_id=trace_id)
         
-        # Prepare evidence text
-        evidence_text = self._prepare_evidence_text(evidence)
+        # Use custom_input if provided (hierarchical mode), else prepare evidence text
+        if custom_input:
+            evidence_text = custom_input
+        else:
+            evidence_text = self._prepare_evidence_text(evidence)
         
         # Get current datetime in target timezone
         tz_name = "America/Sao_Paulo"

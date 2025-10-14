@@ -65,3 +65,17 @@ chunking:
 shrink:
   enable_auto_shrink: true  # Enable auto-shrink on overflow
   preserve_min_quotas: true # Preserve minimum bucket quotas during shrink
+
+hierarchical:
+  enable: true              # Enable hierarchical mode
+  min_threads: 30           # Min threads to activate hierarchical mode
+  min_emails: 150           # Min emails to activate hierarchical mode
+  per_thread_max_chunks_in: 8  # Max chunks per thread for summarization
+  summary_max_tokens: 90    # Max tokens for thread summary
+  parallel_pool: 8          # Max parallel thread summarization workers
+  timeout_sec: 20           # Timeout per thread summarization
+  degrade_on_timeout: "best_2_chunks"  # Degradation strategy on timeout
+  final_input_token_cap: 4000  # Max tokens for final aggregator input
+  max_latency_increase_pct: 50  # Max acceptable latency increase %
+  target_latency_increase_pct: 30  # Target latency increase %
+  max_cost_increase_per_email_pct: 40  # Max acceptable cost increase per email %

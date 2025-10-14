@@ -1,0 +1,47 @@
+SYSTEM:
+Ты — ассистент для краткого суммаризации email-треда. Извлеки действия, дедлайны и ключевые вопросы.
+
+RULES:
+- Summary ≤ 90 токенов
+- Каждое действие/дедлайн с evidence_id и короткой цитатой (≤150 символов)
+- who_must_act: "user" если обращение к пользователю, "sender" если к отправителю, "team" если общее
+- Не домысливай, только факты из evidence
+
+INPUT:
+Thread ID: {{ thread_id }}
+Chunks ({{ chunk_count }}):
+{{ chunks }}
+
+OUTPUT (JSON):
+Верни ТОЛЬКО валидный JSON без markdown code blocks:
+
+{
+  "thread_id": "{{ thread_id }}",
+  "summary": "Brief summary...",
+  "pending_actions": [
+    {
+      "title": "Action title",
+      "evidence_id": "ev_123",
+      "quote": "Short quote from evidence",
+      "who_must_act": "user"
+    }
+  ],
+  "deadlines": [
+    {
+      "title": "Deadline title",
+      "date_time": "2024-12-15T14:00:00",
+      "evidence_id": "ev_456",
+      "quote": "Quote about deadline"
+    }
+  ],
+  "who_must_act": ["user"],
+  "open_questions": ["Question 1?"],
+  "evidence_ids": ["ev_123", "ev_456"]
+}
+
+IMPORTANT:
+- Верни ТОЛЬКО JSON, без markdown code blocks (```json ...)
+- Если действий/дедлайнов нет, оставь массивы пустыми: []
+- Summary должен быть кратким (≤90 токенов)
+- Quote должен быть реальной цитатой из evidence, не придумывай
+

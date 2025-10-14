@@ -100,7 +100,7 @@ class ThreadAction(BaseModel):
     """Action item from thread summary."""
     title: str = Field(max_length=100, description="Brief action title")
     evidence_id: str = Field(description="Evidence ID reference")
-    quote: str = Field(min_length=10, max_length=150, description="Short quote from evidence")
+    quote: str = Field(min_length=10, max_length=300, description="Short quote from evidence (up to 300 chars)")
     who_must_act: str = Field(description="user/sender/team")
 
 
@@ -115,7 +115,7 @@ class ThreadDeadline(BaseModel):
 class ThreadSummary(BaseModel):
     """Per-thread mini-summary output."""
     thread_id: str = Field(description="Thread/conversation ID")
-    summary: str = Field(max_length=300, description="Brief summary ≤90 tokens")
+    summary: str = Field(max_length=600, description="Brief summary ≤200 tokens (up to 600 chars)")
     pending_actions: List[ThreadAction] = Field(default_factory=list, description="Actions from this thread")
     deadlines: List[ThreadDeadline] = Field(default_factory=list, description="Deadlines from this thread")
     who_must_act: List[str] = Field(default_factory=list, description="user/others")

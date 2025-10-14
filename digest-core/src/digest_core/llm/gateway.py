@@ -13,6 +13,13 @@ import pytz
 from jinja2 import Environment, FileSystemLoader
 
 try:
+    from json_repair import repair_json
+except ImportError:
+    # Fallback if json-repair not available
+    def repair_json(text: str) -> str:
+        return text
+
+try:
     from jsonschema import validate, ValidationError
 except ImportError:
     ValidationError = Exception
@@ -219,20 +226,46 @@ Signals: action_verbs=[{action_verbs_str}]; dates=[{dates_str}]; contains_questi
                         lines = lines[:-1]
                     content_stripped = "\n".join(lines).strip()
                 
-                parsed_content = json.loads(content_stripped)
-            except json.JSONDecodeError as e:
-                logger.warning(
-                    "Invalid JSON in LLM response, retrying", 
-                    error=str(e),
-                    content_preview=content[:500] if len(content) > 500 else content
-                )
+                # Try to parse JSON first
+                try:
+                    parsed_content = json.loads(content_stripped)
+                except json.JSONDecodeError as e:
+                    logger.warning(
+                        "Invalid JSON in LLM response, attempting repair",
+                        error=str(e),
+                        content_preview=content[:500] if len(content) > 500 else content
+                    )
+                    # Try to repair JSON using json-repair
+                    try:
+                        repaired_json = repair_json(content_stripped)
+                        parsed_content = json.loads(repaired_json)
+                        logger.info("JSON successfully repaired", original_error=str(e))
+                    except Exception as repair_error:
+                        logger.warning(
+                            "JSON repair failed, retrying",
+                            repair_error=str(repair_error)
+                        )
                 # Add retry instruction to system message
-                messages[0]["content"] = messages[0]["content"] + "\n\nIMPORTANT: Return ONLY valid JSON per schema. No markdown, no code blocks, no additional text."
+                if "IMPORTANT: Return ONLY valid JSON" not in messages[0]["content"]:
+                    messages[0]["content"] = messages[0]["content"] + "\n\nIMPORTANT: Return ONLY valid JSON per schema. No markdown, no code blocks, no additional text."
+
+                # On second retry, use simplified prompt
+                if hasattr(self, '_retry_count'):
+                    self._retry_count = getattr(self, '_retry_count', 0) + 1
+                else:
+                    self._retry_count = 1
+
+                if self._retry_count >= 2:
+                    # Use simplified prompt for final retry
+                    messages[0]["content"] = self._get_simplified_prompt(messages[0]["content"])
+                    logger.info("Using simplified prompt for retry", retry_count=self._retry_count)
+
                 raise ValueError("Invalid JSON response")
-            
-            # Try to capture token usage from headers or body
-            tokens_in = None
-            tokens_out = None
+            except Exception as e:
+                logger.error("LLM request failed",
+                            error=str(e),
+                            trace_id=trace_id)
+                raise
             # Common header variants
             header_keys_in = [
                 "x-llm-tokens-in", "x-tokens-in", "x-usage-tokens-in"
@@ -279,12 +312,7 @@ Signals: action_verbs=[{action_verbs_str}]; dates=[{dates_str}]; contains_questi
                         error=str(e),
                         trace_id=trace_id)
             raise
-        except Exception as e:
-            logger.error("LLM request failed", 
-                        error=str(e),
-                        trace_id=trace_id)
-            raise
-    
+
     def _validate_response(self, response_data: Dict[str, Any], evidence: List[EvidenceChunk]) -> Dict[str, Any]:
         """Validate LLM response against schema."""
         try:
@@ -406,7 +434,38 @@ Signals: action_verbs=[{action_verbs_str}]; dates=[{dates_str}]; contains_questi
             text_parts.append("")
         
         return "\n".join(text_parts)
-    
+
+    def _get_simplified_prompt(self, original_prompt: str) -> str:
+        """
+        Create a simplified version of the prompt for retry attempts.
+
+        Args:
+            original_prompt: Original complex prompt
+
+        Returns:
+            Simplified prompt with clearer instructions
+        """
+        # Extract just the core instructions and examples
+        simplified = """Ты — ассистент для суммаризации email-треда.
+
+ВАЖНО: Верни ТОЛЬКО валидный JSON без markdown:
+{
+  "thread_id": "ID",
+  "summary": "Краткое описание (максимум 600 символов)",
+  "pending_actions": [{"title": "Действие", "evidence_id": "id", "quote": "Цитата (максимум 300 символов)", "who_must_act": "user"}],
+  "deadlines": [{"title": "Дедлайн", "date_time": "2024-12-15T14:00:00", "evidence_id": "id", "quote": "Цитата"}],
+  "who_must_act": ["user"],
+  "open_questions": ["Вопрос?"],
+  "evidence_ids": ["id1", "id2"]
+}
+
+Правила:
+- Максимум 600 символов для summary
+- Максимум 300 символов для quote
+- Обрезай по границе предложения если нужно"""
+
+        return simplified
+
     def get_request_stats(self) -> Dict[str, Any]:
         """Get request statistics."""
         return {
@@ -551,8 +610,14 @@ Signals: action_verbs=[{action_verbs_str}]; dates=[{dates_str}]; contains_questi
         try:
             parsed = json.loads(json_str)
         except json.JSONDecodeError as e:
-            logger.error("Failed to parse JSON", error=str(e), json_preview=json_str[:500])
-            raise ValueError(f"Invalid JSON in response: {e}")
+            logger.warning("Invalid JSON in response, attempting repair", error=str(e), json_preview=json_str[:500])
+            try:
+                repaired_json = repair_json(json_str)
+                parsed = json.loads(repaired_json)
+                logger.info("JSON successfully repaired", original_error=str(e))
+            except Exception as repair_error:
+                logger.error("JSON repair failed", repair_error=str(repair_error), json_preview=json_str[:500])
+                raise ValueError(f"Invalid JSON in response: {e}")
         
         # Add markdown if present
         if markdown_lines:

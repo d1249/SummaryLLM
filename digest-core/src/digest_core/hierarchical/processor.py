@@ -313,13 +313,89 @@ class HierarchicalProcessor:
             
             parsed = json.loads(json_str)
         
+        # Apply smart truncation before validation
+        parsed = self._smart_truncate_parsed(parsed)
+
         summary = ThreadSummary(**parsed)
-        
+
         # Track tokens
         self.metrics.per_thread_tokens.append(len(chunks_text.split()) * 1.3)
-        
+
         return summary
-    
+
+    def _smart_truncate_parsed(self, parsed: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Apply smart truncation to parsed data before validation.
+
+        Args:
+            parsed: Raw parsed data from LLM
+
+        Returns:
+            Truncated data that should pass validation
+        """
+        # Truncate summary to 600 chars max
+        if parsed.get("summary") and len(parsed["summary"]) > 600:
+            summary = parsed["summary"]
+            # Try to truncate at sentence boundary
+            truncated = self._truncate_at_sentence_boundary(summary, 600)
+            parsed["summary"] = truncated
+            logger.info("Truncated summary", original_length=len(summary), truncated_length=len(truncated))
+
+        # Truncate quotes in pending_actions
+        if parsed.get("pending_actions"):
+            for action in parsed["pending_actions"]:
+                if action.get("quote") and len(action["quote"]) > 300:
+                    quote = action["quote"]
+                    truncated_quote = self._truncate_at_sentence_boundary(quote, 300)
+                    action["quote"] = truncated_quote
+                    logger.info("Truncated action quote", original_length=len(quote), truncated_length=len(truncated_quote))
+
+        # Truncate quotes in deadlines
+        if parsed.get("deadlines"):
+            for deadline in parsed["deadlines"]:
+                if deadline.get("quote") and len(deadline["quote"]) > 300:
+                    quote = deadline["quote"]
+                    truncated_quote = self._truncate_at_sentence_boundary(quote, 300)
+                    deadline["quote"] = truncated_quote
+                    logger.info("Truncated deadline quote", original_length=len(quote), truncated_length=len(truncated_quote))
+
+        return parsed
+
+    def _truncate_at_sentence_boundary(self, text: str, max_length: int) -> str:
+        """
+        Truncate text at sentence boundary, keeping under max_length.
+
+        Args:
+            text: Text to truncate
+            max_length: Maximum length
+
+        Returns:
+            Truncated text ending at sentence boundary
+        """
+        import re
+
+        if len(text) <= max_length:
+            return text
+
+        # Try to truncate at sentence end (. ! ?)
+        sentence_endings = ['.', '!', '?']
+        for ending in sentence_endings:
+            # Find last occurrence of sentence ending within limit
+            pattern = r'.*?\\' + re.escape(ending) + r'\s*'
+            match = re.search(pattern, text[:max_length + 50])  # Look a bit ahead
+            if match:
+                truncated = match.group(0).strip()
+                if len(truncated) <= max_length:
+                    return truncated + "..."
+
+        # If no sentence boundary found, truncate at word boundary
+        words = text[:max_length].split()
+        if len(words) > 1:
+            return " ".join(words[:-1]) + "..."
+
+        # Last resort: hard truncate
+        return text[:max_length - 3] + "..."
+
     def _prepare_thread_chunks_text(self, chunks: List[EvidenceChunk]) -> str:
         """
         Prepare chunks text for thread summarization.

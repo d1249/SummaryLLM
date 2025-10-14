@@ -159,7 +159,7 @@ class LLMGateway:
         ]
         
         # Make request with retry logic
-        response_data = self._make_request_with_retry(messages, trace_id, digest_date)
+        response_data = self._make_request_with_retry(messages, trace_id, None)
         
         # Validate response
         validated_response = self._validate_response(response_data.get("data", {}), evidence)
@@ -171,7 +171,7 @@ class LLMGateway:
                 logger.info("Quality retry: empty sections but positive signals present", trace_id=trace_id)
                 quality_hint = "\n\nIMPORTANT: If there are actionable requests or deadlines, return items accordingly. Return strict JSON per schema only."
                 messages[0]["content"] = messages[0]["content"] + quality_hint
-                response_data = self._make_request_with_retry(messages, trace_id, digest_date)
+                response_data = self._make_request_with_retry(messages, trace_id, None)
                 validated_response = self._validate_response(response_data.get("data", {}), evidence)
         
         logger.info("LLM action extraction completed", 
@@ -537,7 +537,7 @@ Signals: action_verbs=[{action_verbs_str}]; dates=[{dates_str}]; contains_questi
         ]
         
         # Make request
-        response_data = self._make_request_with_retry(messages, trace_id, digest_date)
+        response_data = self._make_request_with_retry(messages, trace_id, digest_data.digest_date)
         
         # Extract markdown content
         content = response_data["data"].get("choices", [{}])[0].get("message", {}).get("content", "")
@@ -796,13 +796,13 @@ Signals: action_verbs=[{action_verbs_str}]; dates=[{dates_str}]; contains_questi
                         )
                         # Last resort: create empty thread summary instead of failing completely
                         parsed = {
-                            "thread_id": thread_id,
+                            "thread_id": "unknown",
                             "summary": "Thread summary extraction failed",
                             "pending_actions": [],
                             "deadlines": [],
                             "who_must_act": [],
                             "open_questions": [],
-                            "evidence_ids": [c.evidence_id for c in chunks[:3]]  # Use first 3 evidence IDs
+                            "evidence_ids": []
                         }
         
         # Add markdown if present

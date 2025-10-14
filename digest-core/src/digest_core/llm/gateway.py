@@ -46,6 +46,7 @@ from digest_core.config import LLMConfig
 from digest_core.evidence.split import EvidenceChunk
 from digest_core.llm.schemas import Digest, EnhancedDigest
 from digest_core.llm.date_utils import get_current_datetime_in_tz
+from digest_core.llm.degrade import extractive_fallback
 
 logger = structlog.get_logger()
 
@@ -53,8 +54,10 @@ logger = structlog.get_logger()
 class LLMGateway:
     """Client for LLM Gateway API with retry logic and schema validation."""
     
-    def __init__(self, config: LLMConfig):
+    def __init__(self, config: LLMConfig, enable_degrade: bool = True, degrade_mode: str = "extractive"):
         self.config = config
+        self.enable_degrade = enable_degrade
+        self.degrade_mode = degrade_mode
         self.last_latency_ms = 0
         self.client = httpx.Client(
             timeout=httpx.Timeout(self.config.timeout_s),
@@ -519,6 +522,7 @@ Signals: action_verbs=[{action_verbs_str}]; dates=[{dates_str}]; contains_questi
     ) -> Dict[str, Any]:
         """
         Process evidence with enhanced v2 prompt and validation.
+        With degradation fallback on LLM failures.
         
         Args:
             evidence: List of evidence chunks
@@ -528,13 +532,52 @@ Signals: action_verbs=[{action_verbs_str}]; dates=[{dates_str}]; contains_questi
             custom_input: Custom input text (for hierarchical mode, replaces evidence)
         
         Returns:
-            Dict with digest, trace_id, and meta information
+            Dict with digest, trace_id, meta information, and partial flag
         """
         logger.info("Processing digest with enhanced prompt", 
                    evidence_count=len(evidence) if not custom_input else 0,
                    custom_input=bool(custom_input),
                    prompt_version=prompt_version,
                    trace_id=trace_id)
+        
+        try:
+            return self._process_digest_internal(evidence, digest_date, trace_id, prompt_version, custom_input)
+            
+        except Exception as llm_err:
+            logger.error("LLM digest processing failed",
+                        error=str(llm_err),
+                        trace_id=trace_id)
+            
+            if not self.enable_degrade or custom_input:
+                # Don't degrade hierarchical mode (custom_input) or if degrade disabled
+                raise
+            
+            # Use extractive fallback
+            logger.warning("Using extractive fallback for digest", trace_id=trace_id)
+            fallback_digest = extractive_fallback(
+                evidence,
+                digest_date,
+                trace_id,
+                reason="llm_processing_failed"
+            )
+            
+            return {
+                "trace_id": trace_id,
+                "digest": fallback_digest,
+                "meta": {},
+                "partial": True,
+                "reason": "llm_failed"
+            }
+    
+    def _process_digest_internal(
+        self,
+        evidence: List[EvidenceChunk], 
+        digest_date: str, 
+        trace_id: str, 
+        prompt_version: str = "v2",
+        custom_input: str = None
+    ) -> Dict[str, Any]:
+        """Internal digest processing without fallback logic."""
         
         # Use custom_input if provided (hierarchical mode), else prepare evidence text
         if custom_input:

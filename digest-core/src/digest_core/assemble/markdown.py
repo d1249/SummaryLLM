@@ -4,7 +4,7 @@ Markdown output assembler for digest data with Russian localization.
 from pathlib import Path
 import structlog
 
-from digest_core.llm.schemas import Digest
+from digest_core.llm.schemas import Digest, EnhancedDigest
 
 logger = structlog.get_logger()
 
@@ -201,3 +201,141 @@ class MarkdownAssembler:
     def format_evidence_reference(self, source_type: str, evidence_id: str) -> str:
         """Format evidence reference in required format."""
         return f"**Источник:** {source_type}, evidence {evidence_id}"
+    
+    def write_enhanced_digest(self, digest: EnhancedDigest, output_path: Path) -> None:
+        """
+        Write enhanced digest v2 data to Markdown file.
+        
+        Args:
+            digest: EnhancedDigest instance
+            output_path: Path to output file
+        """
+        logger.info("Writing enhanced Markdown digest v2", output_path=str(output_path))
+        
+        try:
+            # Generate markdown content
+            markdown_content = self._generate_enhanced_markdown(digest)
+            
+            # Write to file
+            with open(output_path, 'w', encoding='utf-8') as f:
+                f.write(markdown_content)
+            
+            word_count = self._count_words(markdown_content)
+            logger.info("Enhanced Markdown digest written successfully", 
+                       output_path=str(output_path),
+                       word_count=word_count)
+            
+        except Exception as e:
+            logger.error("Failed to write enhanced Markdown digest", 
+                        output_path=str(output_path),
+                        error=str(e))
+            raise
+    
+    def _generate_enhanced_markdown(self, digest: EnhancedDigest) -> str:
+        """Generate markdown content from enhanced digest v2."""
+        lines = []
+        
+        # Header
+        lines.append(f"# Дайджест действий - {digest.digest_date}")
+        lines.append(f"*Trace ID: {digest.trace_id}*")
+        lines.append(f"*Timezone: {digest.timezone}*")
+        lines.append(f"*Schema version: {digest.schema_version}*")
+        lines.append("")
+        
+        # Check if digest is empty
+        total_items = (len(digest.my_actions) + len(digest.others_actions) + 
+                      len(digest.deadlines_meetings) + len(digest.risks_blockers) + 
+                      len(digest.fyi))
+        
+        if total_items == 0:
+            lines.append("За период релевантных действий не найдено.")
+            if digest.markdown_summary:
+                lines.append("")
+                lines.append("---")
+                lines.append(digest.markdown_summary)
+            return "\n".join(lines)
+        
+        # My actions
+        if digest.my_actions:
+            lines.append("## Мои действия")
+            lines.append("")
+            for i, action in enumerate(digest.my_actions, 1):
+                lines.append(f"### {i}. {action.title}")
+                lines.append(f"**Описание:** {action.description}")
+                if action.due_date:
+                    due_label = f" ({action.due_date_label})" if action.due_date_label else ""
+                    lines.append(f"**Срок:** {action.due_date}{due_label}")
+                if action.due_date_normalized:
+                    lines.append(f"**Дата (ISO):** {action.due_date_normalized}")
+                lines.append(f"**Уверенность:** {action.confidence}")
+                if action.actors:
+                    lines.append(f"**Актёры:** {', '.join(action.actors)}")
+                if action.response_channel:
+                    lines.append(f"**Канал ответа:** {action.response_channel}")
+                lines.append(f"**Источник:** Evidence {action.evidence_id}")
+                lines.append(f'**Цитата:** "{action.quote}"')
+                lines.append("")
+        
+        # Others' actions
+        if digest.others_actions:
+            lines.append("## Действия других")
+            lines.append("")
+            for i, action in enumerate(digest.others_actions, 1):
+                lines.append(f"### {i}. {action.title}")
+                lines.append(f"**Описание:** {action.description}")
+                if action.due_date:
+                    due_label = f" ({action.due_date_label})" if action.due_date_label else ""
+                    lines.append(f"**Срок:** {action.due_date}{due_label}")
+                lines.append(f"**Уверенность:** {action.confidence}")
+                if action.actors:
+                    lines.append(f"**Актёры:** {', '.join(action.actors)}")
+                lines.append(f"**Источник:** Evidence {action.evidence_id}")
+                lines.append(f'**Цитата:** "{action.quote}"')
+                lines.append("")
+        
+        # Deadlines and meetings
+        if digest.deadlines_meetings:
+            lines.append("## Дедлайны и встречи")
+            lines.append("")
+            for i, item in enumerate(digest.deadlines_meetings, 1):
+                lines.append(f"### {i}. {item.title}")
+                date_label = f" ({item.date_label})" if item.date_label else ""
+                lines.append(f"**Дата/время:** {item.date_time}{date_label}")
+                if item.location:
+                    lines.append(f"**Место:** {item.location}")
+                if item.participants:
+                    lines.append(f"**Участники:** {', '.join(item.participants)}")
+                lines.append(f"**Источник:** Evidence {item.evidence_id}")
+                lines.append(f'**Цитата:** "{item.quote}"')
+                lines.append("")
+        
+        # Risks and blockers
+        if digest.risks_blockers:
+            lines.append("## Риски и блокеры")
+            lines.append("")
+            for i, item in enumerate(digest.risks_blockers, 1):
+                lines.append(f"### {i}. {item.title}")
+                lines.append(f"**Серьёзность:** {item.severity}")
+                lines.append(f"**Влияние:** {item.impact}")
+                lines.append(f"**Источник:** Evidence {item.evidence_id}")
+                lines.append(f'**Цитата:** "{item.quote}"')
+                lines.append("")
+        
+        # FYI items
+        if digest.fyi:
+            lines.append("## К сведению (FYI)")
+            lines.append("")
+            for i, item in enumerate(digest.fyi, 1):
+                lines.append(f"### {i}. {item.title}")
+                if item.category:
+                    lines.append(f"**Категория:** {item.category}")
+                lines.append(f"**Источник:** Evidence {item.evidence_id}")
+                lines.append(f'**Цитата:** "{item.quote}"')
+                lines.append("")
+        
+        # Add markdown summary if present
+        if digest.markdown_summary:
+            lines.append("---")
+            lines.append(digest.markdown_summary)
+        
+        return "\n".join(lines)

@@ -49,3 +49,19 @@ selection_weights:
   sender_rank: 1.0          # Weight multiplier per sender rank level
   thread_activity: 0.5      # Weight for thread activity
   negative_prior: -2.0      # Penalty for noreply/unsubscribe patterns
+
+context_budget:
+  max_total_tokens: 7000    # Maximum total tokens for LLM input
+  per_thread_max: 3         # Maximum chunks per thread
+
+chunking:
+  long_email_tokens: 1000   # Threshold for long email
+  max_chunks_if_long: 3     # Max chunks for long emails
+  max_chunks_default: 12    # Default max chunks per message
+  adaptive_high_load_emails: 200  # Email count threshold for high load
+  adaptive_high_load_threads: 60  # Thread count threshold for high load
+  adaptive_multiplier: 0.75 # Multiplier for high load
+
+shrink:
+  enable_auto_shrink: true  # Enable auto-shrink on overflow
+  preserve_min_quotas: true # Preserve minimum bucket quotas during shrink

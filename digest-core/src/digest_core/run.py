@@ -151,21 +151,35 @@ def run_digest(from_date: str, sources: List[str], out: str, model: str, window:
         logger.info("Starting evidence splitting", stage="evidence")
         evidence_splitter = EvidenceSplitter(
             user_aliases=config.ews.user_aliases,
-            user_timezone=config.time.user_timezone
+            user_timezone=config.time.user_timezone,
+            context_budget_config=config.context_budget,
+            chunking_config=config.chunking
         )
-        evidence_chunks = evidence_splitter.split_evidence(threads)
-        logger.info("Evidence splitting completed", evidence_chunks=len(evidence_chunks))
+        # Pass statistics for adaptive chunking
+        total_emails = len(messages)
+        total_threads = len(threads)
+        evidence_chunks = evidence_splitter.split_evidence(threads, total_emails, total_threads)
+        logger.info("Evidence splitting completed", 
+                   evidence_chunks=len(evidence_chunks),
+                   total_emails=total_emails,
+                   total_threads=total_threads)
         
         # Step 5: Select relevant context
         logger.info("Starting context selection", stage="select")
         context_selector = ContextSelector(
             buckets_config=config.selection_buckets,
-            weights_config=config.selection_weights
+            weights_config=config.selection_weights,
+            context_budget_config=config.context_budget,
+            shrink_config=config.shrink
         )
         selected_evidence = context_selector.select_context(evidence_chunks)
         selection_metrics = context_selector.get_metrics()
         logger.info("Context selection completed", 
                    evidence_selected=len(selected_evidence),
+                   budget_requested=selection_metrics.get('budget_requested', 0),
+                   budget_applied=selection_metrics.get('budget_applied', 0),
+                   shrinks_count=selection_metrics.get('shrinks_count', 0),
+                   shrink_percentage=selection_metrics.get('shrink_percentage', 0),
                    **selection_metrics)
         
         # Step 6: Process with LLM
@@ -346,21 +360,35 @@ def run_digest_dry_run(from_date: str, sources: List[str], out: str, model: str,
         logger.info("Starting evidence splitting", stage="evidence")
         evidence_splitter = EvidenceSplitter(
             user_aliases=config.ews.user_aliases,
-            user_timezone=config.time.user_timezone
+            user_timezone=config.time.user_timezone,
+            context_budget_config=config.context_budget,
+            chunking_config=config.chunking
         )
-        evidence_chunks = evidence_splitter.split_evidence(threads)
-        logger.info("Evidence splitting completed", evidence_chunks=len(evidence_chunks))
+        # Pass statistics for adaptive chunking
+        total_emails = len(messages)
+        total_threads = len(threads)
+        evidence_chunks = evidence_splitter.split_evidence(threads, total_emails, total_threads)
+        logger.info("Evidence splitting completed", 
+                   evidence_chunks=len(evidence_chunks),
+                   total_emails=total_emails,
+                   total_threads=total_threads)
         
         # Step 5: Select relevant context
         logger.info("Starting context selection", stage="select")
         context_selector = ContextSelector(
             buckets_config=config.selection_buckets,
-            weights_config=config.selection_weights
+            weights_config=config.selection_weights,
+            context_budget_config=config.context_budget,
+            shrink_config=config.shrink
         )
         selected_evidence = context_selector.select_context(evidence_chunks)
         selection_metrics = context_selector.get_metrics()
         logger.info("Context selection completed", 
                    evidence_selected=len(selected_evidence),
+                   budget_requested=selection_metrics.get('budget_requested', 0),
+                   budget_applied=selection_metrics.get('budget_applied', 0),
+                   shrinks_count=selection_metrics.get('shrinks_count', 0),
+                   shrink_percentage=selection_metrics.get('shrink_percentage', 0),
                    **selection_metrics)
         
         # Dry-run stops here - no LLM processing or assembly

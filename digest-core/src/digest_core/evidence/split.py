@@ -1,12 +1,14 @@
 """
 Evidence splitting for LLM processing.
 """
+import re
 import uuid
 from typing import List, NamedTuple, Dict, Any
 import structlog
 
 from digest_core.threads.build import ConversationThread
 from digest_core.evidence import signals
+from digest_core.config import ContextBudgetConfig, ChunkingConfig
 
 logger = structlog.get_logger()
 
@@ -28,23 +30,30 @@ class EvidenceChunk(NamedTuple):
 class EvidenceSplitter:
     """Split conversation threads into evidence chunks for LLM processing."""
     
-    def __init__(self, user_aliases: List[str] = None, user_timezone: str = "Europe/Moscow"):
+    def __init__(self, user_aliases: List[str] = None, user_timezone: str = "Europe/Moscow",
+                 context_budget_config: ContextBudgetConfig = None,
+                 chunking_config: ChunkingConfig = None):
         self.max_tokens_per_chunk = 512
         self.min_tokens_per_chunk = 64
-        self.max_chunks_per_message = 12
-        self.max_total_tokens = 3000  # Total budget per LLM call
+        self.context_budget_config = context_budget_config or ContextBudgetConfig()
+        self.chunking_config = chunking_config or ChunkingConfig()
+        self.max_total_tokens = self.context_budget_config.max_total_tokens
         self.user_aliases = user_aliases or []
         self.user_timezone = user_timezone
         
-    def split_evidence(self, threads: List[ConversationThread]) -> List[EvidenceChunk]:
-        """Split threads into evidence chunks."""
-        logger.info("Splitting evidence from threads", thread_count=len(threads))
+    def split_evidence(self, threads: List[ConversationThread], 
+                      total_emails: int = 0, total_threads: int = 0) -> List[EvidenceChunk]:
+        """Split threads into evidence chunks with adaptive chunking."""
+        logger.info("Splitting evidence from threads", 
+                   thread_count=len(threads),
+                   total_emails=total_emails,
+                   total_threads=total_threads)
         
         all_chunks = []
         
         for thread in threads:
             try:
-                chunks = self._split_thread_evidence(thread)
+                chunks = self._split_thread_evidence(thread, total_emails, total_threads)
                 all_chunks.extend(chunks)
             except Exception as e:
                 logger.warning("Failed to split thread evidence", 
@@ -63,19 +72,49 @@ class EvidenceSplitter:
         
         return limited_chunks
     
-    def _split_thread_evidence(self, thread: ConversationThread) -> List[EvidenceChunk]:
+    def _split_thread_evidence(self, thread: ConversationThread, 
+                               total_emails: int = 0, total_threads: int = 0) -> List[EvidenceChunk]:
         """Split a single thread into evidence chunks."""
         chunks = []
         
         # Process each message in the thread
         for i, message in enumerate(thread.messages):
-            message_chunks = self._split_message_content(message, thread.conversation_id, i)
+            message_chunks = self._split_message_content(
+                message, thread.conversation_id, i, total_emails, total_threads)
             chunks.extend(message_chunks)
         
         return chunks
     
-    def _split_message_content(self, message, conversation_id: str, message_index: int) -> List[EvidenceChunk]:
-        """Split a single message into chunks."""
+    def _detect_structural_breaks(self, text: str) -> List[int]:
+        """
+        Detect structural break points in text (headers, lists, separators).
+        Returns list of line indices where breaks occur.
+        """
+        lines = text.split('\n')
+        break_points = []
+        
+        for i, line in enumerate(lines):
+            # Markdown headers
+            if re.match(r'^#{1,3}\s+', line):
+                break_points.append(i)
+            # CAPS + colon (ЗАГОЛОВОК: / HEADER:)
+            elif re.match(r'^[A-ZА-Я][A-ZА-Я\s]{3,}:\s*$', line):
+                break_points.append(i)
+            # Numbered lists
+            elif re.match(r'^\s*\d+[\.)]\s+', line):
+                break_points.append(i)
+            # Email markers (On ... wrote:, От:, From:)
+            elif re.match(r'^(On .+ wrote:|От:|From:|Subject:)', line, re.IGNORECASE):
+                break_points.append(i)
+            # Horizontal rules
+            elif re.match(r'^[\-\*=]{3,}\s*$', line):
+                break_points.append(i)
+        
+        return break_points
+    
+    def _split_message_content(self, message, conversation_id: str, message_index: int,
+                               total_emails: int = 0, total_threads: int = 0) -> List[EvidenceChunk]:
+        """Split message using adaptive chunking and structural boundaries."""
         chunks = []
         
         # Clean and prepare content
@@ -83,7 +122,25 @@ class EvidenceSplitter:
         if not content:
             return chunks
         
-        # Split by paragraphs first
+        # Calculate adaptive max_chunks_per_message
+        message_tokens = int(len(content.split()) * 1.3)
+        
+        if message_tokens > self.chunking_config.long_email_tokens:
+            base_max = self.chunking_config.max_chunks_if_long
+        else:
+            base_max = self.chunking_config.max_chunks_default
+        
+        # Apply adaptive multiplier for high load
+        if (total_emails >= self.chunking_config.adaptive_high_load_emails or 
+            total_threads >= self.chunking_config.adaptive_high_load_threads):
+            base_max = max(2, int(base_max * self.chunking_config.adaptive_multiplier))
+        
+        max_chunks_for_message = base_max
+        
+        # Detect structural breaks for better segmentation
+        structural_breaks = self._detect_structural_breaks(content)
+        
+        # Split by paragraphs first (but respect structural breaks)
         paragraphs = [p.strip() for p in content.split('\n\n') if p.strip()]
         
         current_chunk = ""
@@ -118,8 +175,8 @@ class EvidenceSplitter:
                 else:
                     current_chunk = paragraph
             
-            # Limit chunks per message
-            if chunk_count >= self.max_chunks_per_message:
+            # Limit chunks per message (adaptive)
+            if chunk_count >= max_chunks_for_message:
                 break
         
         # Add final chunk if it exists

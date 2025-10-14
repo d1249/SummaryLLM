@@ -131,6 +131,28 @@ class SelectionWeightsConfig(BaseModel):
     negative_prior: float = Field(default=-2.0, description="Penalty for noreply/unsubscribe patterns")
 
 
+class ContextBudgetConfig(BaseModel):
+    """Configuration for context token budget."""
+    max_total_tokens: int = Field(default=7000, description="Maximum total tokens for LLM input")
+    per_thread_max: int = Field(default=3, description="Maximum chunks per thread")
+
+
+class ChunkingConfig(BaseModel):
+    """Configuration for message chunking."""
+    long_email_tokens: int = Field(default=1000, description="Threshold for long email")
+    max_chunks_if_long: int = Field(default=3, description="Max chunks for long emails")
+    max_chunks_default: int = Field(default=12, description="Default max chunks per message")
+    adaptive_high_load_emails: int = Field(default=200, description="Email count threshold for high load")
+    adaptive_high_load_threads: int = Field(default=60, description="Thread count threshold for high load")
+    adaptive_multiplier: float = Field(default=0.75, description="Multiplier for high load")
+
+
+class ShrinkConfig(BaseModel):
+    """Configuration for auto-shrink behavior."""
+    enable_auto_shrink: bool = Field(default=True, description="Enable auto-shrink on overflow")
+    preserve_min_quotas: bool = Field(default=True, description="Preserve minimum bucket quotas during shrink")
+
+
 class Config(BaseSettings):
     """Main configuration class."""
     
@@ -141,6 +163,9 @@ class Config(BaseSettings):
     observability: ObservabilityConfig = Field(default_factory=ObservabilityConfig)
     selection_buckets: SelectionBucketsConfig = Field(default_factory=SelectionBucketsConfig)
     selection_weights: SelectionWeightsConfig = Field(default_factory=SelectionWeightsConfig)
+    context_budget: ContextBudgetConfig = Field(default_factory=ContextBudgetConfig)
+    chunking: ChunkingConfig = Field(default_factory=ChunkingConfig)
+    shrink: ShrinkConfig = Field(default_factory=ShrinkConfig)
     
     class Config:
         env_file = ".env"
@@ -232,6 +257,12 @@ class Config(BaseSettings):
             self.selection_buckets = SelectionBucketsConfig(**yaml_config['selection_buckets'])
         if 'selection_weights' in yaml_config:
             self.selection_weights = SelectionWeightsConfig(**yaml_config['selection_weights'])
+        if 'context_budget' in yaml_config:
+            self.context_budget = ContextBudgetConfig(**yaml_config['context_budget'])
+        if 'chunking' in yaml_config:
+            self.chunking = ChunkingConfig(**yaml_config['chunking'])
+        if 'shrink' in yaml_config:
+            self.shrink = ShrinkConfig(**yaml_config['shrink'])
     
     def _get_env_value_for_key(self, key: str) -> str:
         """Get environment variable value for a given config key."""

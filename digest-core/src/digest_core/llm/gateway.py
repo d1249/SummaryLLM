@@ -4,13 +4,24 @@ LLM Gateway client for processing evidence chunks with retry logic.
 import json
 import time
 from typing import List, Dict, Any, Optional
+from datetime import datetime
+from pathlib import Path
 import httpx
 import tenacity
 import structlog
+import pytz
+from jinja2 import Environment, FileSystemLoader
+
+try:
+    from jsonschema import validate, ValidationError
+except ImportError:
+    ValidationError = Exception
+    validate = None
 
 from digest_core.config import LLMConfig
 from digest_core.evidence.split import EvidenceChunk
-from digest_core.llm.schemas import Digest
+from digest_core.llm.schemas import Digest, EnhancedDigest
+from digest_core.llm.date_utils import get_current_datetime_in_tz
 
 logger = structlog.get_logger()
 
@@ -404,6 +415,245 @@ Signals: action_verbs=[{action_verbs_str}]; dates=[{dates_str}]; contains_questi
             "model": self.config.model,
             "timeout_s": self.config.timeout_s
         }
+    
+    def process_digest(
+        self, 
+        evidence: List[EvidenceChunk], 
+        digest_date: str, 
+        trace_id: str, 
+        prompt_version: str = "v2"
+    ) -> Dict[str, Any]:
+        """
+        Process evidence with enhanced v2 prompt and validation.
+        
+        Args:
+            evidence: List of evidence chunks
+            digest_date: Date of the digest
+            trace_id: Trace ID for logging
+            prompt_version: Version of prompt to use (default: "v2")
+        
+        Returns:
+            Dict with digest, trace_id, and meta information
+        """
+        logger.info("Processing digest with enhanced prompt", 
+                   evidence_count=len(evidence),
+                   prompt_version=prompt_version,
+                   trace_id=trace_id)
+        
+        # Prepare evidence text
+        evidence_text = self._prepare_evidence_text(evidence)
+        
+        # Get current datetime in target timezone
+        tz_name = "America/Sao_Paulo"
+        current_datetime = get_current_datetime_in_tz(tz_name)
+        
+        # Load and render prompt
+        prompts_dir = Path("prompts")
+        env = Environment(loader=FileSystemLoader(prompts_dir))
+        template = env.get_template(f"summarize.{prompt_version}.j2")
+        
+        rendered_prompt = template.render(
+            digest_date=digest_date,
+            trace_id=trace_id,
+            current_datetime=current_datetime,
+            evidence=evidence_text,
+            evidence_count=len(evidence)
+        )
+        
+        # Prepare messages
+        messages = [
+            {"role": "user", "content": rendered_prompt}
+        ]
+        
+        # Call LLM with retry
+        response_data = self._make_request_with_retry(messages, trace_id)
+        
+        # Parse response (JSON + optional Markdown)
+        parsed = self._parse_enhanced_response(response_data.get("data", ""))
+        
+        # Validate with jsonschema
+        if validate is not None:
+            validated = self._validate_enhanced_schema(parsed)
+        else:
+            logger.warning("jsonschema not available, skipping validation")
+            validated = parsed
+        
+        # Convert to Pydantic model
+        try:
+            digest = EnhancedDigest(**validated)
+        except Exception as e:
+            logger.error("Failed to parse as EnhancedDigest", error=str(e))
+            raise ValueError(f"Invalid digest structure: {e}")
+        
+        logger.info("Digest processing completed",
+                   my_actions=len(digest.my_actions),
+                   others_actions=len(digest.others_actions),
+                   deadlines=len(digest.deadlines_meetings),
+                   trace_id=trace_id)
+        
+        return {
+            "trace_id": trace_id,
+            "digest": digest,
+            "meta": response_data.get("meta", {})
+        }
+    
+    def _parse_enhanced_response(self, response_text: str) -> Dict[str, Any]:
+        """
+        Parse response that may contain JSON + Markdown.
+        
+        Args:
+            response_text: Raw response from LLM
+        
+        Returns:
+            Parsed dict with JSON data and optional markdown_summary
+        """
+        if not response_text:
+            raise ValueError("Empty response from LLM")
+        
+        text = response_text.strip()
+        
+        # Try to extract JSON (may be followed by markdown)
+        lines = text.split('\n')
+        
+        brace_count = 0
+        in_json = False
+        json_lines = []
+        markdown_lines = []
+        
+        for i, line in enumerate(lines):
+            if not in_json and line.strip().startswith('{'):
+                in_json = True
+            
+            if in_json:
+                json_lines.append(line)
+                brace_count += line.count('{') - line.count('}')
+                
+                if brace_count == 0:
+                    # JSON ended
+                    markdown_lines = lines[i+1:]
+                    break
+        
+        # Parse JSON
+        if not json_lines:
+            raise ValueError("No JSON found in response")
+        
+        json_str = '\n'.join(json_lines)
+        try:
+            parsed = json.loads(json_str)
+        except json.JSONDecodeError as e:
+            logger.error("Failed to parse JSON", error=str(e), json_preview=json_str[:500])
+            raise ValueError(f"Invalid JSON in response: {e}")
+        
+        # Add markdown if present
+        if markdown_lines:
+            markdown_text = '\n'.join(markdown_lines).strip()
+            if markdown_text and 'markdown_summary' not in parsed:
+                parsed['markdown_summary'] = markdown_text
+        
+        return parsed
+    
+    def _validate_enhanced_schema(self, response_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Validate response against enhanced schema using jsonschema.
+        
+        Args:
+            response_data: Parsed response data
+        
+        Returns:
+            Validated response data
+        
+        Raises:
+            ValueError: If validation fails
+        """
+        # Define JSON schema
+        action_item_schema = {
+            "type": "object",
+            "required": ["title", "description", "evidence_id", "quote", "confidence"],
+            "properties": {
+                "title": {"type": "string", "minLength": 1},
+                "description": {"type": "string"},
+                "evidence_id": {"type": "string", "minLength": 1},
+                "quote": {"type": "string", "minLength": 10},
+                "due_date": {"type": ["string", "null"]},
+                "due_date_normalized": {"type": ["string", "null"]},
+                "due_date_label": {"type": ["string", "null"]},
+                "actors": {"type": "array", "items": {"type": "string"}},
+                "confidence": {"type": "string", "enum": ["High", "Medium", "Low"]},
+                "response_channel": {"type": ["string", "null"]}
+            }
+        }
+        
+        schema = {
+            "type": "object",
+            "required": ["schema_version", "digest_date", "trace_id"],
+            "properties": {
+                "schema_version": {"type": "string"},
+                "prompt_version": {"type": "string"},
+                "digest_date": {"type": "string"},
+                "trace_id": {"type": "string"},
+                "timezone": {"type": "string"},
+                "my_actions": {
+                    "type": "array",
+                    "items": action_item_schema
+                },
+                "others_actions": {
+                    "type": "array",
+                    "items": action_item_schema
+                },
+                "deadlines_meetings": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "required": ["title", "evidence_id", "quote", "date_time"],
+                        "properties": {
+                            "title": {"type": "string"},
+                            "evidence_id": {"type": "string"},
+                            "quote": {"type": "string", "minLength": 10},
+                            "date_time": {"type": "string"},
+                            "date_label": {"type": ["string", "null"]},
+                            "location": {"type": ["string", "null"]},
+                            "participants": {"type": "array"}
+                        }
+                    }
+                },
+                "risks_blockers": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "required": ["title", "evidence_id", "quote", "severity", "impact"],
+                        "properties": {
+                            "title": {"type": "string"},
+                            "evidence_id": {"type": "string"},
+                            "quote": {"type": "string", "minLength": 10},
+                            "severity": {"type": "string"},
+                            "impact": {"type": "string"}
+                        }
+                    }
+                },
+                "fyi": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "required": ["title", "evidence_id", "quote"],
+                        "properties": {
+                            "title": {"type": "string"},
+                            "evidence_id": {"type": "string"},
+                            "quote": {"type": "string", "minLength": 10},
+                            "category": {"type": ["string", "null"]}
+                        }
+                    }
+                },
+                "markdown_summary": {"type": ["string", "null"]}
+            }
+        }
+        
+        try:
+            validate(instance=response_data, schema=schema)
+            logger.info("Enhanced schema validation passed")
+            return response_data
+        except ValidationError as e:
+            logger.error("Schema validation failed", error=str(e), path=list(e.path))
+            raise ValueError(f"Invalid response schema: {e.message}")
     
     def close(self):
         """Close the HTTP client."""

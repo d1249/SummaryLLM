@@ -1,6 +1,9 @@
 time:
   user_timezone: "Europe/Moscow"
   window: "calendar_day"
+  mailbox_tz: "Europe/Moscow"      # Mailbox timezone for normalizing naive datetime
+  runner_tz: "America/Sao_Paulo"   # Runner/job timezone
+  fail_on_naive: true              # Fail if naive datetime is encountered
 
 ews:
   endpoint: "https://owa.corp-domain.ru/EWS/Exchange.asmx"
@@ -24,6 +27,8 @@ llm:
     Authorization: "Bearer ${LLM_TOKEN}"
   max_tokens_per_run: 30000
   cost_limit_per_run: 5.0
+  strict_json: true          # Enforce strict JSON validation with Pydantic
+  max_retries: 3             # Maximum retry attempts for invalid JSON
 
 observability:
   prometheus_port: 9108
@@ -68,8 +73,12 @@ shrink:
 
 hierarchical:
   enable: true              # Enable hierarchical mode
-  min_threads: 30           # Min threads to activate hierarchical mode
-  min_emails: 150           # Min emails to activate hierarchical mode
+  enable_auto: true         # Enable automatic hierarchical mode activation
+  threshold_threads: 40     # Thread count threshold for auto activation (умеренный порог)
+  threshold_emails: 200     # Email count threshold for auto activation
+  min_threads_to_summarize: 6  # Minimum threads required to use hierarchical mode
+  min_threads: 30           # Min threads to activate (deprecated, use threshold_threads)
+  min_emails: 150           # Min emails to activate (deprecated, use threshold_emails)
   per_thread_max_chunks_in: 8  # Max chunks per thread for summarization
   summary_max_tokens: 90    # Max tokens for thread summary
   parallel_pool: 8          # Max parallel thread summarization workers
@@ -79,3 +88,11 @@ hierarchical:
   max_latency_increase_pct: 50  # Max acceptable latency increase %
   target_latency_increase_pct: 30  # Target latency increase %
   max_cost_increase_per_email_pct: 40  # Max acceptable cost increase per email %
+
+masking:
+  enforce_input: true       # Enforce PII masking before LLM
+  enforce_output: true      # Validate no PII in LLM output
+
+degrade:
+  enable: true              # Enable degradation on LLM failures
+  mode: "extractive"        # Degradation mode: extractive | empty

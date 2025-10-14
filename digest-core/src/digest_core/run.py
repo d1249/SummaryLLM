@@ -177,10 +177,6 @@ def run_digest(from_date: str, sources: List[str], out: str, model: str, window:
         selection_metrics = context_selector.get_metrics()
         logger.info("Context selection completed", 
                    evidence_selected=len(selected_evidence),
-                   budget_requested=selection_metrics.get('budget_requested', 0),
-                   budget_applied=selection_metrics.get('budget_applied', 0),
-                   shrinks_count=selection_metrics.get('shrinks_count', 0),
-                   shrink_percentage=selection_metrics.get('shrink_percentage', 0),
                    **selection_metrics)
         
         # Step 6: Process with LLM
@@ -440,10 +436,6 @@ def run_digest_dry_run(from_date: str, sources: List[str], out: str, model: str,
         selection_metrics = context_selector.get_metrics()
         logger.info("Context selection completed", 
                    evidence_selected=len(selected_evidence),
-                   budget_requested=selection_metrics.get('budget_requested', 0),
-                   budget_applied=selection_metrics.get('budget_applied', 0),
-                   shrinks_count=selection_metrics.get('shrinks_count', 0),
-                   shrink_percentage=selection_metrics.get('shrink_percentage', 0),
                    **selection_metrics)
         
         # Dry-run stops here - no LLM processing or assembly

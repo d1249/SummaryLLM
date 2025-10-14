@@ -222,6 +222,34 @@ class MetricsCollector:
             'Whether ranking is enabled (1=enabled, 0=disabled)',
             registry=self.registry
         )
+        
+        # Hierarchical orchestration metrics
+        self.hierarchical_runs_total = Counter(
+            'hierarchical_runs_total',
+            'Total hierarchical digest runs',
+            ['trigger_reason'],  # auto_threads, auto_emails, manual
+            registry=self.registry
+        )
+        
+        self.avg_subsummary_chunks = Gauge(
+            'avg_subsummary_chunks',
+            'Average number of chunks per thread subsummary',
+            registry=self.registry
+        )
+        
+        self.saved_tokens_total = Counter(
+            'saved_tokens_total',
+            'Total tokens saved by skipping LLM calls',
+            ['skip_reason'],  # no_evidence, empty_selection
+            registry=self.registry
+        )
+        
+        self.must_include_chunks_total = Counter(
+            'must_include_chunks_total',
+            'Total must-include chunks added',
+            ['chunk_type'],  # mentions, last_update
+            registry=self.registry
+        )
     
     def record_llm_latency(self, latency_ms: float):
         """Record LLM request latency."""
@@ -345,6 +373,26 @@ class MetricsCollector:
         self.ranking_enabled.set(1.0 if enabled else 0.0)
         logger.debug("Set ranking enabled", enabled=enabled)
     
+    def record_hierarchical_run(self, trigger_reason: str):
+        """Record hierarchical digest run."""
+        self.hierarchical_runs_total.labels(trigger_reason=trigger_reason).inc()
+        logger.debug("Recorded hierarchical run", trigger_reason=trigger_reason)
+    
+    def update_avg_subsummary_chunks(self, avg_chunks: float):
+        """Update average subsummary chunks gauge."""
+        self.avg_subsummary_chunks.set(avg_chunks)
+        logger.debug("Updated avg subsummary chunks", avg_chunks=avg_chunks)
+    
+    def record_saved_tokens(self, count: int, skip_reason: str):
+        """Record tokens saved by optimization."""
+        self.saved_tokens_total.labels(skip_reason=skip_reason).inc(count)
+        logger.debug("Recorded saved tokens", count=count, skip_reason=skip_reason)
+    
+    def record_must_include_chunk(self, chunk_type: str, count: int = 1):
+        """Record must-include chunk added."""
+        self.must_include_chunks_total.labels(chunk_type=chunk_type).inc(count)
+        logger.debug("Recorded must-include chunk", chunk_type=chunk_type, count=count)
+    
     def update_system_metrics(self):
         """Update system metrics."""
         uptime = time.time() - self.start_time
@@ -391,7 +439,11 @@ class MetricsCollector:
                 'duplicates_found_total',
                 'rank_score_histogram',
                 'top10_actions_share',
-                'ranking_enabled'
+                'ranking_enabled',
+                'hierarchical_runs_total',
+                'avg_subsummary_chunks',
+                'saved_tokens_total',
+                'must_include_chunks_total'
             ]
         }
     

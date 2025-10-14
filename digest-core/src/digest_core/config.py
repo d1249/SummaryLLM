@@ -190,14 +190,27 @@ class EmailCleanerConfig(BaseModel):
 class HierarchicalConfig(BaseModel):
     """Configuration for hierarchical digest mode."""
     enable: bool = Field(default=True, description="Enable hierarchical mode")
-    min_threads: int = Field(default=30, description="Min threads to activate")
-    min_emails: int = Field(default=150, description="Min emails to activate")
+    auto_enable: bool = Field(default=True, description="Auto-enable based on thresholds")
+    min_threads: int = Field(default=60, description="Min threads to auto-activate (was 30)")
+    min_emails: int = Field(default=300, description="Min emails to auto-activate (was 150)")
     
     per_thread_max_chunks_in: int = Field(default=8, description="Max chunks per thread for summarization")
+    per_thread_max_chunks_exception: int = Field(default=12, description="Max chunks in exceptional cases (mentions, last update)")
     summary_max_tokens: int = Field(default=90, description="Max tokens for thread summary")
     parallel_pool: int = Field(default=8, description="Max parallel thread summarization workers")
     timeout_sec: int = Field(default=20, description="Timeout per thread summarization")
     degrade_on_timeout: str = Field(default="best_2_chunks", description="Degradation strategy on timeout")
+    
+    # Must-include chunks
+    must_include_mentions: bool = Field(default=True, description="Always include chunks with user mentions")
+    must_include_last_update: bool = Field(default=True, description="Always include last update chunk per thread")
+    
+    # Merge policy
+    merge_max_citations: int = Field(default=5, description="Max citations in merged summary (3-5)")
+    merge_include_title: bool = Field(default=True, description="Include brief title in merged summary")
+    
+    # Optimization
+    skip_llm_if_no_evidence: bool = Field(default=True, description="Skip LLM call if no evidence after selection")
     
     final_input_token_cap: int = Field(default=4000, description="Max tokens for final aggregator input")
     max_latency_increase_pct: int = Field(default=50, description="Max acceptable latency increase %")

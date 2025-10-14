@@ -280,9 +280,20 @@ def run_digest(from_date: str, sources: List[str], out: str, model: str, window:
         use_hierarchical = hierarchical_processor.should_use_hierarchical(threads, messages)
         
         if use_hierarchical:
+            # Determine trigger reason for metrics
+            trigger_reason = "manual"
+            if config.hierarchical.auto_enable:
+                if len(threads) >= config.hierarchical.min_threads:
+                    trigger_reason = "auto_threads"
+                elif len(messages) >= config.hierarchical.min_emails:
+                    trigger_reason = "auto_emails"
+            
+            metrics.record_hierarchical_run(trigger_reason)
+            
             logger.info("Using hierarchical mode",
                        threads=len(threads),
                        emails=len(messages),
+                       trigger_reason=trigger_reason,
                        trace_id=trace_id)
             
             # Hierarchical processing: per-thread summaries → final aggregation
@@ -290,12 +301,20 @@ def run_digest(from_date: str, sources: List[str], out: str, model: str, window:
                 threads=threads,
                 all_chunks=evidence_chunks,
                 digest_date=digest_date,
-                trace_id=trace_id
+                trace_id=trace_id,
+                user_aliases=config.ews.user_aliases
             )
             
             # Log hierarchical metrics
             h_metrics = hierarchical_processor.metrics.to_dict()
             logger.info("Hierarchical processing completed", **h_metrics)
+            
+            # Calculate and record avg subsummary chunks
+            if h_metrics.get('threads_summarized', 0) > 0:
+                avg_chunks = sum(hierarchical_processor.metrics.per_thread_tokens) / h_metrics['threads_summarized']
+                # Rough estimate: tokens to chunks
+                avg_chunks_estimate = avg_chunks / 300  # Assume ~300 tokens per chunk
+                metrics.update_avg_subsummary_chunks(avg_chunks_estimate)
             
             # Use EnhancedDigest (v2)
             digest_data = digest

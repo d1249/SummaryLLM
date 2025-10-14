@@ -288,25 +288,31 @@ class HierarchicalProcessor:
         response = self.llm_gateway._make_request_with_retry(messages, f"{trace_id}_thread_{thread_id}")
         
         # Parse and validate
-        response_data = response.get("data", "")
+        response_data = response.get("data", {})
         
-        # Try to parse JSON (may have markdown code blocks)
-        if "```json" in response_data:
-            # Extract JSON from code block
-            json_start = response_data.find("```json") + 7
-            json_end = response_data.find("```", json_start)
-            json_str = response_data[json_start:json_end].strip()
-        elif response_data.strip().startswith("{"):
-            json_str = response_data.strip()
+        # Check if data is already a dict (parsed by gateway)
+        if isinstance(response_data, dict):
+            parsed = response_data
         else:
-            # Try to find first {
-            json_start = response_data.find("{")
-            if json_start != -1:
-                json_str = response_data[json_start:]
+            # Parse string response (fallback for older gateway versions)
+            # Try to parse JSON (may have markdown code blocks)
+            if "```json" in response_data:
+                # Extract JSON from code block
+                json_start = response_data.find("```json") + 7
+                json_end = response_data.find("```", json_start)
+                json_str = response_data[json_start:json_end].strip()
+            elif response_data.strip().startswith("{"):
+                json_str = response_data.strip()
             else:
-                raise ValueError("No JSON found in response")
+                # Try to find first {
+                json_start = response_data.find("{")
+                if json_start != -1:
+                    json_str = response_data[json_start:]
+                else:
+                    raise ValueError("No JSON found in response")
+            
+            parsed = json.loads(json_str)
         
-        parsed = json.loads(json_str)
         summary = ThreadSummary(**parsed)
         
         # Track tokens

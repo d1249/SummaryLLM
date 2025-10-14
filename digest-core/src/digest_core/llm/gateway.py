@@ -503,16 +503,20 @@ Signals: action_verbs=[{action_verbs_str}]; dates=[{dates_str}]; contains_questi
             "meta": response_data.get("meta", {})
         }
     
-    def _parse_enhanced_response(self, response_text: str) -> Dict[str, Any]:
+    def _parse_enhanced_response(self, response_text) -> Dict[str, Any]:
         """
         Parse response that may contain JSON + Markdown.
         
         Args:
-            response_text: Raw response from LLM
+            response_text: Raw response from LLM (str or dict)
         
         Returns:
             Parsed dict with JSON data and optional markdown_summary
         """
+        # If already a dict (parsed by gateway), return as is
+        if isinstance(response_text, dict):
+            return response_text
+        
         if not response_text:
             raise ValueError("Empty response from LLM")
         

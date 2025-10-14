@@ -220,6 +220,7 @@ class Config(BaseSettings):
     shrink: ShrinkConfig = Field(default_factory=ShrinkConfig)
     hierarchical: HierarchicalConfig = Field(default_factory=HierarchicalConfig)
     email_cleaner: EmailCleanerConfig = Field(default_factory=EmailCleanerConfig)
+    ranker: RankerConfig = Field(default_factory=RankerConfig)
     
     class Config:
         env_file = ".env"
@@ -321,6 +322,8 @@ class Config(BaseSettings):
             self.hierarchical = HierarchicalConfig(**yaml_config['hierarchical'])
         if 'email_cleaner' in yaml_config:
             self.email_cleaner = EmailCleanerConfig(**yaml_config['email_cleaner'])
+        if 'ranker' in yaml_config:
+            self.ranker = RankerConfig(**yaml_config['ranker'])
     
     def _get_env_value_for_key(self, key: str) -> str:
         """Get environment variable value for a given config key."""

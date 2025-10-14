@@ -202,6 +202,26 @@ class MetricsCollector:
             'Total duplicate messages found by checksum',
             registry=self.registry
         )
+        
+        # Ranking metrics
+        self.rank_score_histogram = Histogram(
+            'rank_score_histogram',
+            'Distribution of ranking scores for digest items',
+            buckets=[0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0],
+            registry=self.registry
+        )
+        
+        self.top10_actions_share = Gauge(
+            'top10_actions_share',
+            'Share of actionable items in top 10 positions (0.0-1.0)',
+            registry=self.registry
+        )
+        
+        self.ranking_enabled = Gauge(
+            'ranking_enabled',
+            'Whether ranking is enabled (1=enabled, 0=disabled)',
+            registry=self.registry
+        )
     
     def record_llm_latency(self, latency_ms: float):
         """Record LLM request latency."""
@@ -310,6 +330,21 @@ class MetricsCollector:
         self.duplicates_found_total.inc(count)
         logger.debug("Recorded duplicate found", count=count)
     
+    def record_rank_score(self, score: float):
+        """Record ranking score."""
+        self.rank_score_histogram.observe(score)
+        logger.debug("Recorded rank score", score=score)
+    
+    def update_top10_actions_share(self, share: float):
+        """Update share of actions in top 10."""
+        self.top10_actions_share.set(share)
+        logger.debug("Updated top10 actions share", share=share)
+    
+    def set_ranking_enabled(self, enabled: bool):
+        """Set ranking enabled status."""
+        self.ranking_enabled.set(1.0 if enabled else 0.0)
+        logger.debug("Set ranking enabled", enabled=enabled)
+    
     def update_system_metrics(self):
         """Update system metrics."""
         uptime = time.time() - self.start_time
@@ -353,7 +388,10 @@ class MetricsCollector:
                 'threads_merged_total',
                 'subject_normalized_total',
                 'redundancy_index',
-                'duplicates_found_total'
+                'duplicates_found_total',
+                'rank_score_histogram',
+                'top10_actions_share',
+                'ranking_enabled'
             ]
         }
     

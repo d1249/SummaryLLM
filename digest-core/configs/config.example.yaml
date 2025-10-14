@@ -98,3 +98,24 @@ email_cleaner:
     - 'Privacy Policy'
     - 'Политика конфиденциальности'
   track_removed_spans: true # Track removed text spans for offset mapping
+
+ranker:
+  enabled: true              # Enable ranking of digest items
+  # Feature weights (will be normalized to sum to 1.0)
+  weight_user_in_to: 0.15    # User is direct recipient (To)
+  weight_user_in_cc: 0.05    # User is CC recipient
+  weight_has_action: 0.20    # Item contains action markers
+  weight_has_mention: 0.10   # Item mentions user
+  weight_has_due_date: 0.15  # Item has deadline
+  weight_sender_importance: 0.10  # Sender is important
+  weight_thread_length: 0.05 # Long conversation thread
+  weight_recency: 0.10       # Recent message
+  weight_has_attachments: 0.05  # Has attachments
+  weight_has_project_tag: 0.05  # Has project tag (JIRA, etc.)
+  
+  important_senders:         # Important sender emails or domain patterns
+    - 'ceo@'
+    - 'cto@'
+    - 'manager@'
+  
+  log_positions: true        # Log item positions for A/B analysis

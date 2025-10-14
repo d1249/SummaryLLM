@@ -24,6 +24,7 @@ from digest_core.llm.schemas import Digest, EnhancedDigest, ExtractedActionItem
 from digest_core.hierarchical import HierarchicalProcessor
 from digest_core.evidence.citations import CitationBuilder, CitationValidator, enrich_item_with_citations
 from digest_core.evidence.actions import ActionMentionExtractor, enrich_actions_with_evidence
+from digest_core.select.ranker import DigestRanker
 
 
 logger = structlog.get_logger()
@@ -508,6 +509,81 @@ def run_digest(from_date: str, sources: List[str], out: str, model: str, window:
             
             logger.info("Extracted actions enriched and added to digest",
                        total_extracted_actions=len(digest_data.extracted_actions))
+        
+        # Step 6.7: Rank digest items by actionability
+        if config.ranker.enabled:
+            logger.info("Starting item ranking", stage="ranking")
+            
+            # Prepare weights from config
+            weights = {
+                'user_in_to': config.ranker.weight_user_in_to,
+                'user_in_cc': config.ranker.weight_user_in_cc,
+                'has_action': config.ranker.weight_has_action,
+                'has_mention': config.ranker.weight_has_mention,
+                'has_due_date': config.ranker.weight_has_due_date,
+                'sender_importance': config.ranker.weight_sender_importance,
+                'thread_length': config.ranker.weight_thread_length,
+                'recency': config.ranker.weight_recency,
+                'has_attachments': config.ranker.weight_has_attachments,
+                'has_project_tag': config.ranker.weight_has_project_tag,
+            }
+            
+            # Initialize ranker
+            ranker = DigestRanker(
+                weights=weights,
+                user_aliases=config.ews.user_aliases,
+                important_senders=config.ranker.important_senders
+            )
+            
+            # Rank different item types
+            if use_hierarchical:
+                # Rank my_actions (most important)
+                if digest_data.my_actions:
+                    digest_data.my_actions = ranker.rank_items(digest_data.my_actions, evidence_chunks)
+                    for item in digest_data.my_actions:
+                        if hasattr(item, 'rank_score'):
+                            metrics.record_rank_score(item.rank_score)
+                
+                # Rank others_actions
+                if digest_data.others_actions:
+                    digest_data.others_actions = ranker.rank_items(digest_data.others_actions, evidence_chunks)
+                    for item in digest_data.others_actions:
+                        if hasattr(item, 'rank_score'):
+                            metrics.record_rank_score(item.rank_score)
+                
+                # Rank deadlines_meetings
+                if digest_data.deadlines_meetings:
+                    digest_data.deadlines_meetings = ranker.rank_items(digest_data.deadlines_meetings, evidence_chunks)
+                    for item in digest_data.deadlines_meetings:
+                        if hasattr(item, 'rank_score'):
+                            metrics.record_rank_score(item.rank_score)
+                
+                # Rank risks_blockers
+                if digest_data.risks_blockers:
+                    digest_data.risks_blockers = ranker.rank_items(digest_data.risks_blockers, evidence_chunks)
+                
+                # Rank FYI
+                if digest_data.fyi:
+                    digest_data.fyi = ranker.rank_items(digest_data.fyi, evidence_chunks)
+                
+                # Calculate top10 actions share (from my_actions)
+                if digest_data.my_actions:
+                    top10_share = ranker.get_top_n_actions_share(digest_data.my_actions, n=min(10, len(digest_data.my_actions)))
+                    metrics.update_top10_actions_share(top10_share)
+            else:
+                # Legacy v1: rank items within each section
+                for section in digest_data.sections:
+                    if section.items:
+                        section.items = ranker.rank_items(section.items, evidence_chunks)
+                        for item in section.items:
+                            if hasattr(item, 'rank_score'):
+                                metrics.record_rank_score(item.rank_score)
+            
+            metrics.set_ranking_enabled(True)
+            logger.info("Item ranking completed")
+        else:
+            metrics.set_ranking_enabled(False)
+            logger.info("Item ranking disabled")
         
         # Step 7: Assemble outputs
         logger.info("Starting output assembly", stage="assemble")

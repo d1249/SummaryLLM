@@ -60,6 +60,7 @@ class ActionItem(BaseModel):
     response_channel: Optional[str] = Field(None, description="email/slack/meeting")
     email_subject: Optional[str] = Field(default=None)
     citations: List[Citation] = Field(default_factory=list, description="Evidence citations with validated offsets")
+    rank_score: Optional[float] = Field(None, ge=0.0, le=1.0, description="Ranking score (0.0-1.0) for actionability")
 
 
 class DeadlineMeeting(BaseModel):
@@ -73,6 +74,7 @@ class DeadlineMeeting(BaseModel):
     participants: List[str] = Field(default_factory=list)
     email_subject: Optional[str] = Field(default=None)
     citations: List[Citation] = Field(default_factory=list, description="Evidence citations with validated offsets")
+    rank_score: Optional[float] = Field(None, ge=0.0, le=1.0, description="Ranking score (0.0-1.0) for actionability")
 
 
 class RiskBlocker(BaseModel):
@@ -84,6 +86,7 @@ class RiskBlocker(BaseModel):
     impact: str
     email_subject: Optional[str] = Field(default=None)
     citations: List[Citation] = Field(default_factory=list, description="Evidence citations with validated offsets")
+    rank_score: Optional[float] = Field(None, ge=0.0, le=1.0, description="Ranking score (0.0-1.0) for actionability")
 
 
 class FYIItem(BaseModel):
@@ -94,6 +97,7 @@ class FYIItem(BaseModel):
     category: Optional[str] = None
     email_subject: Optional[str] = Field(default=None)
     citations: List[Citation] = Field(default_factory=list, description="Evidence citations with validated offsets")
+    rank_score: Optional[float] = Field(None, ge=0.0, le=1.0, description="Ranking score (0.0-1.0) for actionability")
 
 
 class ExtractedActionItem(BaseModel):
@@ -107,6 +111,7 @@ class ExtractedActionItem(BaseModel):
     evidence_id: str = Field(description="Evidence ID reference")
     citations: List[Citation] = Field(default_factory=list, description="Evidence citations with validated offsets")
     email_subject: Optional[str] = Field(default=None)
+    rank_score: Optional[float] = Field(None, ge=0.0, le=1.0, description="Ranking score (0.0-1.0) for actionability")
 
 
 class EnhancedDigest(BaseModel):

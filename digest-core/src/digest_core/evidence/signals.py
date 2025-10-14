@@ -1,10 +1,38 @@
 """
 Signal extraction utilities for evidence chunks.
 """
-import re
+import re as _stdre
 from datetime import datetime
 from typing import List
 import pytz
+
+# Try to use external regex module with safe Unicode properties
+try:
+    import regex
+    _HAS_REGEX = True
+except ImportError:
+    regex = None
+    _HAS_REGEX = False
+
+# Safe Cyrillic word pattern with fallback
+def _get_cyrillic_word_pattern():
+    """Get compiled Cyrillic word pattern with safe implementation."""
+    if _HAS_REGEX:
+        # Use Unicode property - safe, no bad character ranges
+        _INWORD_SEP = r"[\-'']"
+        pattern = rf"(?:\p{{IsCyrillic}}+(?:{_INWORD_SEP}\p{{IsCyrillic}}+)*)"
+        try:
+            return regex.compile(pattern, flags=regex.UNICODE | regex.IGNORECASE)
+        except Exception:
+            pass  # Fall through to stdlib fallback
+    
+    # Fallback: stdlib re with explicit Unicode range (no hyphen-as-range)
+    # U+0400-U+04FF covers Cyrillic block, including Ё/ё
+    pattern = r"(?:[\u0400-\u04FF]+(?:[\-''][\u0400-\u04FF]+)*)"
+    return _stdre.compile(pattern, flags=_stdre.UNICODE | _stdre.IGNORECASE)
+
+# Compiled pattern (initialized once)
+CYRILLIC_WORD = _get_cyrillic_word_pattern()
 
 
 # Action verbs in Russian and English
@@ -86,20 +114,30 @@ def extract_dates(text: str) -> List[str]:
     
     # Pattern 1: DD/MM/YYYY or DD.MM.YYYY
     date_pattern_1 = r'\b\d{1,2}[./]\d{1,2}[./]\d{2,4}\b'
-    matches_1 = re.findall(date_pattern_1, text)
+    matches_1 = _stdre.findall(date_pattern_1, text)
     found_dates.extend(matches_1)
     
     # Pattern 2: YYYY-MM-DD
     date_pattern_2 = r'\b\d{4}-\d{2}-\d{2}\b'
-    matches_2 = re.findall(date_pattern_2, text)
+    matches_2 = _stdre.findall(date_pattern_2, text)
     found_dates.extend(matches_2)
     
     # Pattern 3: Russian date deadlines "до/к/не позднее [число] [месяц]"
-    ru_date_pattern = re.compile(
-        r'\b(до|к|не позднее)\s+(\d{1,2})\s+(январ[ья]|феврал[ья]|марта|апрел[ья]|ма[я-й]|'
-        r'июн[ья]|июл[ья]|август[а]?|сентябр[ья]|октябр[ья]|ноябр[ья]|декабр[ья])\b',
-        re.IGNORECASE
-    )
+    # Safe implementation without hyphen-as-range in character classes
+    if _HAS_REGEX:
+        # Use regex module for safer Unicode handling
+        ru_date_pattern = regex.compile(
+            r'\b(до|к|не позднее)\s+(\d{1,2})\s+(январ[ья]|феврал[ья]|марта|апрел[ья]|ма[яй]|'
+            r'июн[ья]|июл[ья]|август[а]?|сентябр[ья]|октябр[ья]|ноябр[ья]|декабр[ья])\b',
+            regex.IGNORECASE | regex.UNICODE
+        )
+    else:
+        # Stdlib re fallback: explicit alternatives instead of range
+        ru_date_pattern = _stdre.compile(
+            r'\b(до|к|не позднее)\s+(\d{1,2})\s+(январ[ья]|феврал[ья]|марта|апрел[ья]|ма[яй]|'
+            r'июн[ья]|июл[ья]|август[а]?|сентябр[ья]|октябр[ья]|ноябр[ья]|декабр[ья])\b',
+            _stdre.IGNORECASE | _stdre.UNICODE
+        )
     ru_date_matches = ru_date_pattern.findall(text)
     for match in ru_date_matches:
         # match is tuple: (prefix, day, month)

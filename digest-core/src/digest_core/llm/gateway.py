@@ -208,6 +208,10 @@ Signals: action_verbs=[{action_verbs_str}]; dates=[{dates_str}]; contains_questi
         """Make request to LLM Gateway with retry logic for invalid JSON."""
         start_time = time.time()
         
+        # Initialize token counters before try block to avoid UnboundLocalError in finally
+        tokens_in = None
+        tokens_out = None
+        
         try:
             # Prepare request payload
             payload = {
@@ -342,14 +346,15 @@ Signals: action_verbs=[{action_verbs_str}]; dates=[{dates_str}]; contains_questi
 
             logger.info("LLM request successful", 
                        latency_ms=self.last_latency_ms,
-                       tokens_in=tokens_in, tokens_out=tokens_out,
+                       tokens_in=tokens_in or 0, 
+                       tokens_out=tokens_out or 0,
                        trace_id=trace_id)
             
             return {
                 "trace_id": trace_id,
                 "latency_ms": self.last_latency_ms,
                 "data": parsed_content,
-                "meta": {"tokens_in": tokens_in, "tokens_out": tokens_out}
+                "meta": {"tokens_in": tokens_in or 0, "tokens_out": tokens_out or 0}
             }
             
         except httpx.HTTPStatusError as e:

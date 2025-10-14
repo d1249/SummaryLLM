@@ -47,6 +47,7 @@ from digest_core.evidence.split import EvidenceChunk
 from digest_core.llm.schemas import Digest, EnhancedDigest
 from digest_core.llm.date_utils import get_current_datetime_in_tz
 from digest_core.llm.degrade import extractive_fallback
+from digest_core.privacy.masking import mask_text, validate_llm_output
 
 logger = structlog.get_logger()
 
@@ -54,10 +55,19 @@ logger = structlog.get_logger()
 class LLMGateway:
     """Client for LLM Gateway API with retry logic and schema validation."""
     
-    def __init__(self, config: LLMConfig, enable_degrade: bool = True, degrade_mode: str = "extractive"):
+    def __init__(
+        self,
+        config: LLMConfig,
+        enable_degrade: bool = True,
+        degrade_mode: str = "extractive",
+        enforce_input_masking: bool = True,
+        enforce_output_masking: bool = True
+    ):
         self.config = config
         self.enable_degrade = enable_degrade
         self.degrade_mode = degrade_mode
+        self.enforce_input_masking = enforce_input_masking
+        self.enforce_output_masking = enforce_output_masking
         self.last_latency_ms = 0
         self.client = httpx.Client(
             timeout=httpx.Timeout(self.config.timeout_s),
@@ -180,7 +190,14 @@ Signals: action_verbs=[{action_verbs_str}]; dates=[{dates_str}]; contains_questi
 """
             evidence_parts.append(part)
         
-        return "\n".join(evidence_parts)
+        evidence_combined = "\n".join(evidence_parts)
+        
+        # Apply PII masking if enabled
+        if self.enforce_input_masking:
+            evidence_combined = mask_text(evidence_combined, enforce=True)
+            logger.info("Input PII masking applied", evidence_count=len(evidence))
+        
+        return evidence_combined
     
     @tenacity.retry(
         stop=tenacity.stop_after_attempt(2),  # Retry once on JSON errors
@@ -231,6 +248,16 @@ Signals: action_verbs=[{action_verbs_str}]; dates=[{dates_str}]; contains_questi
                     "latency_ms": self.last_latency_ms,
                     "data": {"sections": []}
                 }
+            
+            # Validate output for PII leakage if enabled
+            if self.enforce_output_masking:
+                try:
+                    validate_llm_output(content, enforce=True)
+                    logger.info("Output PII validation passed")
+                except ValueError as pii_err:
+                    logger.error("PII leakage detected in LLM output", error=str(pii_err))
+                    # Still proceed but log the violation
+                    # In production, might want to raise or redact
             
             # Try to parse JSON with minimal cleanup
             try:

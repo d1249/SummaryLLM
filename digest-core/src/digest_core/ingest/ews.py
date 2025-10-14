@@ -15,6 +15,7 @@ import tenacity
 import ssl
 
 from digest_core.config import EWSConfig, TimeConfig
+from digest_core.ingest.timezone import ensure_tz_aware
 
 logger = structlog.get_logger()
 
@@ -42,8 +43,9 @@ class EWSIngest:
     _ssl_verification_disabled = False
     _original_request = None
     
-    def __init__(self, config: EWSConfig):
+    def __init__(self, config: EWSConfig, time_config: TimeConfig = None):
         self.config = config
+        self.time_config = time_config or TimeConfig()
         self.account: Optional[Account] = None
         self._setup_ssl_context()
         
@@ -374,7 +376,7 @@ class EWSIngest:
         
         # If it's EWSDateTime, convert to standard datetime
         if isinstance(datetime_received, EWSDateTime):
-            # EWSDateTime can be converted to standard datetime
+            # EWSDateTime can be converted to standard datetime  
             datetime_received = datetime(
                 datetime_received.year,
                 datetime_received.month,
@@ -383,14 +385,15 @@ class EWSIngest:
                 datetime_received.minute,
                 datetime_received.second,
                 datetime_received.microsecond,
-                tzinfo=timezone.utc
+                tzinfo=datetime_received.tzinfo
             )
-        elif datetime_received.tzinfo is None:
-            # Add UTC timezone if missing
-            datetime_received = datetime_received.replace(tzinfo=timezone.utc)
-        elif datetime_received.tzinfo != timezone.utc:
-            # Convert to UTC
-            datetime_received = datetime_received.astimezone(timezone.utc)
+        
+        # Ensure timezone aware using mailbox_tz
+        datetime_received = ensure_tz_aware(
+            datetime_received,
+            self.time_config.mailbox_tz,
+            fail_on_naive=self.time_config.fail_on_naive
+        )
         
         # Extract importance (Low, Normal, High)
         importance = "Normal"

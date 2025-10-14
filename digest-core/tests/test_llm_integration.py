@@ -74,7 +74,6 @@ class TestLLMIntegration:
               "items": [
                 {
                   "title": "string",
-                  "owners_masked": ["список имен ответственных"],
                   "due": "YYYY-MM-DD|null",
                   "evidence_id": "string",
                   "confidence": 0.0-1.0,

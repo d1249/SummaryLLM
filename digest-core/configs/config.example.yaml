@@ -2,7 +2,7 @@ time:
   user_timezone: "Europe/Moscow"
   window: "calendar_day"
   mailbox_tz: "Europe/Moscow"      # Mailbox timezone for normalizing naive datetime
-  runner_tz: "America/Sao_Paulo"   # Runner/job timezone
+  runner_tz: "Europe/Moscow"   # Runner/job timezone
   fail_on_naive: true              # Fail if naive datetime is encountered
 
 ews:
@@ -17,7 +17,7 @@ ews:
   lookback_hours: 24
   page_size: 100
   sync_state_path: ".state/ews.syncstate"
-  user_aliases: ["alias1@corp-domain.ru", "alias2@corp-domain.ru"]
+  user_aliases: ["Name", "Surname", "Name.Surname@corp-domain.ru", "login"]
 
 llm:
   endpoint: "https://llm-gw.corp.com/api/v1/chat"
@@ -88,10 +88,6 @@ hierarchical:
   max_latency_increase_pct: 50  # Max acceptable latency increase %
   target_latency_increase_pct: 30  # Target latency increase %
   max_cost_increase_per_email_pct: 40  # Max acceptable cost increase per email %
-
-masking:
-  enforce_input: true       # Enforce PII masking before LLM
-  enforce_output: true      # Validate no PII in LLM output
 
 degrade:
   enable: true              # Enable degradation on LLM failures

@@ -81,7 +81,6 @@ class MarkdownAssembler:
                     item_confidence = item.get('confidence', 0)
                     item_evidence_id = item.get('evidence_id', '')
                     item_source_ref = item.get('source_ref', {})
-                    item_owners_masked = item.get('owners_masked', [])
                     item_email_subject = item.get('email_subject')
                 else:
                     item_title = item.title
@@ -89,7 +88,6 @@ class MarkdownAssembler:
                     item_confidence = item.confidence
                     item_evidence_id = item.evidence_id
                     item_source_ref = item.source_ref
-                    item_owners_masked = item.owners_masked
                     item_email_subject = getattr(item, 'email_subject', None)
 
                 lines.append(f"### {i}. {item_title}")
@@ -108,11 +106,6 @@ class MarkdownAssembler:
                     lines.append(f"**Источник:** {source_type}, тема \"{item_email_subject}\", evidence {item_evidence_id}")
                 else:
                     lines.append(f"**Источник:** {source_type}, evidence {item_evidence_id}")
-
-                # Add owners if present
-                if item_owners_masked:
-                    owners_text = ", ".join(item_owners_masked)
-                    lines.append(f"**Ответственные:** {owners_text}")
 
                 lines.append("")
 
@@ -247,19 +240,21 @@ class MarkdownAssembler:
         """Format evidence reference in required format."""
         return f"**Источник:** {source_type}, evidence {evidence_id}"
     
-    def write_enhanced_digest(self, digest: EnhancedDigest, output_path: Path) -> None:
+    def write_enhanced_digest(self, digest: EnhancedDigest, output_path: Path, is_partial: bool = False, partial_reason: str = None) -> None:
         """
         Write enhanced digest v2 data to Markdown file.
         
         Args:
             digest: EnhancedDigest instance
             output_path: Path to output file
+            is_partial: Whether this is a partial digest (due to LLM failure)
+            partial_reason: Reason for partial digest (e.g., "llm_json_error")
         """
-        logger.info("Writing enhanced Markdown digest v2", output_path=str(output_path))
+        logger.info("Writing enhanced Markdown digest v2", output_path=str(output_path), is_partial=is_partial)
         
         try:
             # Generate markdown content
-            markdown_content = self._generate_enhanced_markdown(digest)
+            markdown_content = self._generate_enhanced_markdown(digest, is_partial=is_partial, partial_reason=partial_reason)
             
             # Write to file
             with open(output_path, 'w', encoding='utf-8') as f:
@@ -268,7 +263,8 @@ class MarkdownAssembler:
             word_count = self._count_words(markdown_content)
             logger.info("Enhanced Markdown digest written successfully", 
                        output_path=str(output_path),
-                       word_count=word_count)
+                       word_count=word_count,
+                       is_partial=is_partial)
             
         except Exception as e:
             logger.error("Failed to write enhanced Markdown digest", 
@@ -276,7 +272,7 @@ class MarkdownAssembler:
                         error=str(e))
             raise
     
-    def _generate_enhanced_markdown(self, digest: EnhancedDigest) -> str:
+    def _generate_enhanced_markdown(self, digest: EnhancedDigest, is_partial: bool = False, partial_reason: str = None) -> str:
         """Generate markdown content from enhanced digest v2."""
         lines = []
         
@@ -286,6 +282,33 @@ class MarkdownAssembler:
         lines.append(f"*Timezone: {digest.timezone}*")
         lines.append(f"*Schema version: {digest.schema_version}*")
         lines.append("")
+        
+        # Add partial digest banner if applicable
+        if is_partial:
+            if partial_reason == "llm_json_error":
+                lines.append("---")
+                lines.append("⚠️ **ЧАСТИЧНЫЙ ОТЧЁТ: LLM дал невалидный JSON**")
+                lines.append("")
+                lines.append("Данный дайджест создан в резервном режиме (extractive fallback) из-за ошибки парсинга JSON от LLM.")
+                lines.append("Информация может быть неполной или менее точной, чем обычно.")
+                lines.append("---")
+                lines.append("")
+            elif partial_reason == "llm_processing_failed":
+                lines.append("---")
+                lines.append("⚠️ **ЧАСТИЧНЫЙ ОТЧЁТ: Ошибка обработки LLM**")
+                lines.append("")
+                lines.append("Данный дайджест создан в резервном режиме (extractive fallback) из-за сбоя LLM.")
+                lines.append("Информация может быть неполной или менее точной, чем обычно.")
+                lines.append("---")
+                lines.append("")
+            else:
+                lines.append("---")
+                lines.append("⚠️ **ЧАСТИЧНЫЙ ОТЧЁТ**")
+                lines.append("")
+                lines.append("Данный дайджест создан в резервном режиме (extractive fallback).")
+                lines.append("Информация может быть неполной или менее точной, чем обычно.")
+                lines.append("---")
+                lines.append("")
         
         # Check if digest is empty
         total_items = (len(digest.my_actions) + len(digest.others_actions) + 
@@ -313,8 +336,10 @@ class MarkdownAssembler:
                 if action.due_date_normalized:
                     lines.append(f"**Дата (ISO):** {action.due_date_normalized}")
                 lines.append(f"**Уверенность:** {action.confidence}")
-                if action.actors:
-                    lines.append(f"**Актёры:** {', '.join(action.actors)}")
+                # Render actors or owners (V2 vs V3)
+                actors_or_owners = getattr(action, 'owners', None) or getattr(action, 'actors', None)
+                if actors_or_owners:
+                    lines.append(f"**Ответственные:** {', '.join(actors_or_owners)}")
                 if action.response_channel:
                     lines.append(f"**Канал ответа:** {action.response_channel}")
                 # Add source with email subject
@@ -337,8 +362,10 @@ class MarkdownAssembler:
                     due_label = f" ({action.due_date_label})" if action.due_date_label else ""
                     lines.append(f"**Срок:** {action.due_date}{due_label}")
                 lines.append(f"**Уверенность:** {action.confidence}")
-                if action.actors:
-                    lines.append(f"**Актёры:** {', '.join(action.actors)}")
+                # Render actors or owners (V2 vs V3)
+                actors_or_owners = getattr(action, 'owners', None) or getattr(action, 'actors', None)
+                if actors_or_owners:
+                    lines.append(f"**Ответственные:** {', '.join(actors_or_owners)}")
                 # Add source with email subject
                 email_subject = getattr(action, 'email_subject', None)
                 if email_subject:
@@ -360,9 +387,10 @@ class MarkdownAssembler:
                     lines.append(f"**Место:** {item.location}")
                 if item.participants:
                     lines.append(f"**Участники:** {', '.join(item.participants)}")
-                # Add source with email subject
-                if item.email_subject:
-                    lines.append(f"**Источник:** тема \"{item.email_subject}\", evidence {item.evidence_id}")
+                # Add source with email subject (use getattr for V3 compatibility)
+                email_subject = getattr(item, 'email_subject', None)
+                if email_subject:
+                    lines.append(f"**Источник:** тема \"{email_subject}\", evidence {item.evidence_id}")
                 else:
                     lines.append(f"**Источник:** Evidence {item.evidence_id}")
                 lines.append(f'**Цитата:** "{item.quote}"')
@@ -376,9 +404,14 @@ class MarkdownAssembler:
                 lines.append(f"### {i}. {item.title}")
                 lines.append(f"**Серьёзность:** {item.severity}")
                 lines.append(f"**Влияние:** {item.impact}")
+                # Render owners if present (V3)
+                owners = getattr(item, 'owners', None)
+                if owners:
+                    lines.append(f"**Ответственные:** {', '.join(owners)}")
                 # Add source with email subject
-                if item.email_subject:
-                    lines.append(f"**Источник:** тема \"{item.email_subject}\", evidence {item.evidence_id}")
+                item_email_subject = getattr(item, 'email_subject', None)
+                if item_email_subject:
+                    lines.append(f"**Источник:** тема \"{item_email_subject}\", evidence {item.evidence_id}")
                 else:
                     lines.append(f"**Источник:** Evidence {item.evidence_id}")
                 lines.append(f'**Цитата:** "{item.quote}"')

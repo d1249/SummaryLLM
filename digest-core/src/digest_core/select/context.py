@@ -231,13 +231,25 @@ class ContextSelector:
         
         return False
     
+    def _get_dedup_key(self, chunk: EvidenceChunk) -> tuple:
+        """Get deduplication key (msg_id, start, end) for chunk."""
+        msg_id = chunk.source_ref.get('msg_id', '')
+        start = chunk.source_ref.get('start', 0)
+        end = chunk.source_ref.get('end', 0)
+        return (msg_id, start, end)
+    
     def _select_with_buckets(self, scored_chunks: List[EvidenceChunk]) -> List[EvidenceChunk]:
         """
         Select chunks using balanced bucket strategy with token budget protection.
         
+        Ensures minimum quotas:
+        - At least 1 from dates_deadlines (if available)
+        - At least 1 from addressed_to_me (if available)
+        
         Returns list of selected chunks.
         """
         selected = []
+        seen_chunks = set()  # Track by (msg_id, start, end) for deduplication
         thread_chunk_counts = defaultdict(int)
         remaining_budget = 3000  # Token budget
         
@@ -246,99 +258,195 @@ class ContextSelector:
         
         # Bucket 1: threads_top - cover different threads (1 chunk each by default)
         threads_covered = set()
+        bucket_name = 'threads_top'
+        bucket_kept = 0
+        bucket_dropped = 0
+        
         for chunk in all_sorted:
             if len(threads_covered) >= self.buckets_config.threads_top:
-                break
+                bucket_dropped += 1
+                continue
             
             conv_id = chunk.conversation_id
             if conv_id in threads_covered:
+                bucket_dropped += 1
+                continue
+            
+            # Deduplication by (msg_id, start, end)
+            dedup_key = self._get_dedup_key(chunk)
+            if dedup_key in seen_chunks:
+                bucket_dropped += 1
                 continue
             
             if remaining_budget >= chunk.token_count:
                 selected.append(chunk)
+                seen_chunks.add(dedup_key)
                 threads_covered.add(conv_id)
                 thread_chunk_counts[conv_id] += 1
                 remaining_budget -= chunk.token_count
                 self.metrics.covered_threads.add(conv_id)
-                self.metrics.selected_by_bucket['threads_top'] += 1
+                self.metrics.selected_by_bucket[bucket_name] += 1
+                bucket_kept += 1
+            else:
+                bucket_dropped += 1
         
-        # Bucket 2: addressed_to_me - chunks addressed to user
-        addressed_chunks = [c for c in all_sorted if c.addressed_to_me and c not in selected]
+        logger.info(f"Bucket {bucket_name}: kept={bucket_kept}, dropped={bucket_dropped}")
+        
+        # Bucket 2: addressed_to_me - chunks addressed to user (min 1 if available)
+        bucket_name = 'addressed_to_me'
+        bucket_kept = 0
+        bucket_dropped = 0
+        min_required = 1  # Ensure at least 1 if available
+        
+        addressed_chunks = [c for c in all_sorted if c.addressed_to_me]
         addressed_chunks = sorted(addressed_chunks, key=lambda c: c.priority_score, reverse=True)
         
         for chunk in addressed_chunks:
-            if self.metrics.selected_by_bucket['addressed_to_me'] >= self.buckets_config.addressed_to_me:
+            # Skip if already selected
+            dedup_key = self._get_dedup_key(chunk)
+            if dedup_key in seen_chunks:
+                bucket_dropped += 1
+                continue
+            
+            # Check bucket limit (but ensure min 1)
+            if self.metrics.selected_by_bucket[bucket_name] >= self.buckets_config.addressed_to_me:
+                bucket_dropped += 1
                 break
             
             conv_id = chunk.conversation_id
             if thread_chunk_counts[conv_id] >= self.buckets_config.per_thread_max:
+                bucket_dropped += 1
                 continue
             
-            if remaining_budget >= chunk.token_count:
+            # If this is first item and we need at least 1, relax budget constraint
+            if bucket_kept < min_required or remaining_budget >= chunk.token_count:
                 selected.append(chunk)
+                seen_chunks.add(dedup_key)
                 thread_chunk_counts[conv_id] += 1
-                remaining_budget -= chunk.token_count
+                if remaining_budget >= chunk.token_count:
+                    remaining_budget -= chunk.token_count
                 self.metrics.covered_threads.add(conv_id)
-                self.metrics.selected_by_bucket['addressed_to_me'] += 1
+                self.metrics.selected_by_bucket[bucket_name] += 1
+                bucket_kept += 1
+            else:
+                bucket_dropped += 1
         
-        # Bucket 3: dates_deadlines - chunks with dates/deadlines
-        date_chunks = [c for c in all_sorted 
-                      if len(c.signals.get('dates', [])) > 0 and c not in selected]
+        logger.info(f"Bucket {bucket_name}: kept={bucket_kept}, dropped={bucket_dropped}")
+        
+        # Bucket 3: dates_deadlines - chunks with dates/deadlines (min 1 if available)
+        bucket_name = 'dates_deadlines'
+        bucket_kept = 0
+        bucket_dropped = 0
+        min_required = 1  # Ensure at least 1 if available
+        
+        date_chunks = [c for c in all_sorted if len(c.signals.get('dates', [])) > 0]
         date_chunks = sorted(date_chunks, key=lambda c: c.priority_score, reverse=True)
         
         for chunk in date_chunks:
-            if self.metrics.selected_by_bucket['dates_deadlines'] >= self.buckets_config.dates_deadlines:
+            # Skip if already selected
+            dedup_key = self._get_dedup_key(chunk)
+            if dedup_key in seen_chunks:
+                bucket_dropped += 1
+                continue
+            
+            # Check bucket limit (but ensure min 1)
+            if self.metrics.selected_by_bucket[bucket_name] >= self.buckets_config.dates_deadlines:
+                bucket_dropped += 1
                 break
             
             conv_id = chunk.conversation_id
             if thread_chunk_counts[conv_id] >= self.buckets_config.per_thread_max:
+                bucket_dropped += 1
                 continue
             
-            if remaining_budget >= chunk.token_count:
+            # If this is first item and we need at least 1, relax budget constraint
+            if bucket_kept < min_required or remaining_budget >= chunk.token_count:
                 selected.append(chunk)
+                seen_chunks.add(dedup_key)
                 thread_chunk_counts[conv_id] += 1
-                remaining_budget -= chunk.token_count
+                if remaining_budget >= chunk.token_count:
+                    remaining_budget -= chunk.token_count
                 self.metrics.covered_threads.add(conv_id)
-                self.metrics.selected_by_bucket['dates_deadlines'] += 1
+                self.metrics.selected_by_bucket[bucket_name] += 1
+                bucket_kept += 1
+            else:
+                bucket_dropped += 1
+        
+        logger.info(f"Bucket {bucket_name}: kept={bucket_kept}, dropped={bucket_dropped}")
         
         # Bucket 4: critical_senders - chunks from important senders (rank >= 2)
-        critical_chunks = [c for c in all_sorted 
-                          if c.signals.get('sender_rank', 1) >= 2 and c not in selected]
+        bucket_name = 'critical_senders'
+        bucket_kept = 0
+        bucket_dropped = 0
+        
+        critical_chunks = [c for c in all_sorted if c.signals.get('sender_rank', 1) >= 2]
         critical_chunks = sorted(critical_chunks, key=lambda c: c.priority_score, reverse=True)
         
         for chunk in critical_chunks:
-            if self.metrics.selected_by_bucket['critical_senders'] >= self.buckets_config.critical_senders:
+            # Skip if already selected
+            dedup_key = self._get_dedup_key(chunk)
+            if dedup_key in seen_chunks:
+                bucket_dropped += 1
+                continue
+            
+            if self.metrics.selected_by_bucket[bucket_name] >= self.buckets_config.critical_senders:
+                bucket_dropped += 1
                 break
             
             conv_id = chunk.conversation_id
             if thread_chunk_counts[conv_id] >= self.buckets_config.per_thread_max:
+                bucket_dropped += 1
                 continue
             
             if remaining_budget >= chunk.token_count:
                 selected.append(chunk)
+                seen_chunks.add(dedup_key)
                 thread_chunk_counts[conv_id] += 1
                 remaining_budget -= chunk.token_count
                 self.metrics.covered_threads.add(conv_id)
-                self.metrics.selected_by_bucket['critical_senders'] += 1
+                self.metrics.selected_by_bucket[bucket_name] += 1
+                bucket_kept += 1
+            else:
+                bucket_dropped += 1
+        
+        logger.info(f"Bucket {bucket_name}: kept={bucket_kept}, dropped={bucket_dropped}")
         
         # Bucket 5: remainder - fill up to max_total_chunks with general scoring
-        remainder_chunks = [c for c in all_sorted if c not in selected]
+        bucket_name = 'remainder'
+        bucket_kept = 0
+        bucket_dropped = 0
+        
+        remainder_chunks = [c for c in all_sorted]
         remainder_chunks = sorted(remainder_chunks, key=lambda c: c.priority_score, reverse=True)
         
         for chunk in remainder_chunks:
+            # Skip if already selected
+            dedup_key = self._get_dedup_key(chunk)
+            if dedup_key in seen_chunks:
+                bucket_dropped += 1
+                continue
+            
             if len(selected) >= self.buckets_config.max_total_chunks:
+                bucket_dropped += 1
                 break
             
             conv_id = chunk.conversation_id
             if thread_chunk_counts[conv_id] >= self.buckets_config.per_thread_max:
+                bucket_dropped += 1
                 continue
             
             if remaining_budget >= chunk.token_count:
                 selected.append(chunk)
+                seen_chunks.add(dedup_key)
                 thread_chunk_counts[conv_id] += 1
                 remaining_budget -= chunk.token_count
                 self.metrics.covered_threads.add(conv_id)
-                self.metrics.selected_by_bucket['remainder'] += 1
+                self.metrics.selected_by_bucket[bucket_name] += 1
+                bucket_kept += 1
+            else:
+                bucket_dropped += 1
+        
+        logger.info(f"Bucket {bucket_name}: kept={bucket_kept}, dropped={bucket_dropped}")
         
         # Track discarded action-like chunks
         for chunk in scored_chunks:

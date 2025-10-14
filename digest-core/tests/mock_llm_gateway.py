@@ -103,7 +103,6 @@ class MockLLMGatewayHandler(BaseHTTPRequestHandler):
                     "title": "Мои действия",
                     "items": [{
                         "title": "Mock Action Item",
-                        "owners_masked": ["Иван Иванов"],
                         "due": "2024-01-16",
                         "evidence_id": "ev-mock-001",
                         "confidence": 0.85,
@@ -132,7 +131,6 @@ class MockLLMGatewayHandler(BaseHTTPRequestHandler):
 **Срок:** 2024-01-16
 **Уверенность:** Высокая
 **Источник:** email, evidence ev-mock-001
-**Ответственные:** Иван Иванов
 
 ## Источники
 

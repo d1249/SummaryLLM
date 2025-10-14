@@ -1,6 +1,6 @@
 # digest-core
 
-Daily corporate communications digest with privacy-first design and LLM-powered action extraction.
+Daily corporate communications digest with LLM-powered action extraction.
 
 ## Table of Contents
 
@@ -15,13 +15,12 @@ Daily corporate communications digest with privacy-first design and LLM-powered 
 - [Development](#development)
 - [Architecture](#architecture)
 - [Idempotency](#idempotency)
-- [Privacy & Security](#privacy--security)
+- [Security](#security)
 - [Documentation Links](#documentation-links)
 
 ## Features
 
 - **EWS Integration**: NTLM authentication, corporate CA trust, incremental sync
-- **Privacy-First**: PII handling delegated to LLM Gateway API
 - **Idempotent**: T-48h rebuild window for deterministic results
 - **Dry-Run Mode**: Test EWS connectivity and normalization without LLM calls
 - **Observability**: Prometheus metrics (:9108), health checks (:9109), structured JSON logs
@@ -496,7 +495,7 @@ make format
 
 ```
 EWS → normalize → thread → evidence split → context select
-  → LLM Gateway (PII handling) → validate → assemble (JSON/MD)
+  → LLM Gateway → validate → assemble (JSON/MD)
   → metrics + logs
 ```
 
@@ -510,9 +509,8 @@ Runs are idempotent per `(user_id, digest_date)` with a T-48h rebuild window:
 
 To force rebuild, delete existing artifacts or use `--force` flag.
 
-## Privacy & Security
+## Security
 
-- **PII Handling**: All PII processing (emails, phone numbers, names, SSNs, credit cards, IP addresses) handled by LLM Gateway API
 - **No Payload Logging**: Message bodies never logged
 - **Corporate CA**: TLS verification with custom CA
 - **Non-root Container**: Docker runs as UID 1001

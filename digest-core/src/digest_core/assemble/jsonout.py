@@ -58,7 +58,6 @@ class JSONAssembler:
                     "items": [
                         {
                             "title": item.title,
-                            "owners_masked": item.owners_masked,
                             "due": item.due,
                             "evidence_id": item.evidence_id,
                             "confidence": item.confidence,
@@ -109,7 +108,6 @@ class JSONAssembler:
             for item_dict in section_dict.get("items", []):
                 item = Item(
                     title=item_dict["title"],
-                    owners_masked=item_dict.get("owners_masked", []),
                     due=item_dict.get("due"),
                     evidence_id=item_dict["evidence_id"],
                     confidence=item_dict["confidence"],
@@ -213,10 +211,6 @@ class JSONAssembler:
             return False
         
         # Optional fields validation
-        if item.owners_masked is not None and not isinstance(item.owners_masked, list):
-            logger.warning("Item owners_masked must be a list or None")
-            return False
-        
         if item.due is not None and not isinstance(item.due, str):
             logger.warning("Item due must be a string or None")
             return False
@@ -249,7 +243,6 @@ class JSONAssembler:
                 "source_ref"
             ],
             "item_optional_fields": [
-                "owners_masked",
                 "due",
                 "email_subject"
             ],

@@ -13,6 +13,9 @@ class TimeConfig(BaseModel):
     """Time zone and window configuration."""
     user_timezone: str = Field(default="Europe/Moscow", description="User timezone")
     window: str = Field(default="calendar_day", description="Window mode: calendar_day | rolling_24h")
+    mailbox_tz: str = Field(default="Europe/Moscow", description="Mailbox timezone for normalizing naive datetime")
+    runner_tz: str = Field(default="America/Sao_Paulo", description="Runner/job timezone")
+    fail_on_naive: bool = Field(default=True, description="Fail if naive datetime is encountered")
 
 
 class EWSConfig(BaseModel):
@@ -78,6 +81,8 @@ class LLMConfig(BaseModel):
     headers: Dict[str, str] = Field(default_factory=dict, description="Additional headers")
     max_tokens_per_run: int = Field(default=30000, description="Max tokens per run")
     cost_limit_per_run: float = Field(default=5.0, description="Cost limit per run in USD")
+    strict_json: bool = Field(default=True, description="Enforce strict JSON validation with Pydantic")
+    max_retries: int = Field(default=3, description="Maximum retry attempts for invalid JSON")
     
     def __init__(self, **kwargs):
         # Читаем значения из переменных окружения если они не заданы
@@ -156,8 +161,12 @@ class ShrinkConfig(BaseModel):
 class HierarchicalConfig(BaseModel):
     """Configuration for hierarchical digest mode."""
     enable: bool = Field(default=True, description="Enable hierarchical mode")
-    min_threads: int = Field(default=30, description="Min threads to activate")
-    min_emails: int = Field(default=150, description="Min emails to activate")
+    enable_auto: bool = Field(default=True, description="Enable automatic hierarchical mode activation")
+    threshold_threads: int = Field(default=40, description="Thread count threshold for auto activation")
+    threshold_emails: int = Field(default=200, description="Email count threshold for auto activation")
+    min_threads_to_summarize: int = Field(default=6, description="Minimum threads required to use hierarchical mode")
+    min_threads: int = Field(default=30, description="Min threads to activate (deprecated, use threshold_threads)")
+    min_emails: int = Field(default=150, description="Min emails to activate (deprecated, use threshold_emails)")
     
     per_thread_max_chunks_in: int = Field(default=8, description="Max chunks per thread for summarization")
     summary_max_tokens: int = Field(default=90, description="Max tokens for thread summary")
@@ -169,6 +178,18 @@ class HierarchicalConfig(BaseModel):
     max_latency_increase_pct: int = Field(default=50, description="Max acceptable latency increase %")
     target_latency_increase_pct: int = Field(default=30, description="Target latency increase %")
     max_cost_increase_per_email_pct: int = Field(default=40, description="Max acceptable cost increase per email %")
+
+
+class MaskingConfig(BaseModel):
+    """Configuration for PII masking."""
+    enforce_input: bool = Field(default=True, description="Enforce PII masking before LLM")
+    enforce_output: bool = Field(default=True, description="Validate no PII in LLM output")
+
+
+class DegradeConfig(BaseModel):
+    """Configuration for LLM failure degradation."""
+    enable: bool = Field(default=True, description="Enable degradation on LLM failures")
+    mode: str = Field(default="extractive", description="Degradation mode: extractive | empty")
 
 
 class Config(BaseSettings):
@@ -185,6 +206,8 @@ class Config(BaseSettings):
     chunking: ChunkingConfig = Field(default_factory=ChunkingConfig)
     shrink: ShrinkConfig = Field(default_factory=ShrinkConfig)
     hierarchical: HierarchicalConfig = Field(default_factory=HierarchicalConfig)
+    masking: MaskingConfig = Field(default_factory=MaskingConfig)
+    degrade: DegradeConfig = Field(default_factory=DegradeConfig)
     
     class Config:
         env_file = ".env"
@@ -284,6 +307,10 @@ class Config(BaseSettings):
             self.shrink = ShrinkConfig(**yaml_config['shrink'])
         if 'hierarchical' in yaml_config:
             self.hierarchical = HierarchicalConfig(**yaml_config['hierarchical'])
+        if 'masking' in yaml_config:
+            self.masking = MaskingConfig(**yaml_config['masking'])
+        if 'degrade' in yaml_config:
+            self.degrade = DegradeConfig(**yaml_config['degrade'])
     
     def _get_env_value_for_key(self, key: str) -> str:
         """Get environment variable value for a given config key."""

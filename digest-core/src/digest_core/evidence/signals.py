@@ -9,15 +9,31 @@ import pytz
 
 # Action verbs in Russian and English
 ACTION_VERBS_RU = [
-    "пожалуйста", "нужно", "требуется", "необходимо", "одобрить", "одобрите", "согласовать", "согласуйте",
-    "проверить", "проверьте", "проверить", "завершить", "завершите", "выполнить", "выполните", 
-    "подготовить", "подготовьте", "срочно", "срок", "дедлайн", "до", "просьба", "прошу", "можете", "могли бы"
+    # Requests
+    "пожалуйста", "прошу", "просьба", "можете", "могли бы", "не могли бы",
+    # Requirements
+    "нужно", "требуется", "необходимо", "должны", "обязательно",
+    # Approvals
+    "одобрить", "одобрите", "согласовать", "согласуйте", "утвердить", "утвердите",
+    # Verifications
+    "проверить", "проверьте", "подтвердить", "подтвердите",
+    # Completions
+    "завершить", "завершите", "выполнить", "выполните", "сделать", "сделайте",
+    # Preparations
+    "подготовить", "подготовьте", "доработать", "доработайте",
+    # Responses
+    "ответить", "ответьте", "уточнить", "уточните",
+    # Urgency
+    "срочно", "срок", "дедлайн", "до", "к", "не позднее",
+    # Updates
+    "обновить", "обновите", "актуализировать", "актуализируйте"
 ]
 
 ACTION_VERBS_EN = [
     "please", "need", "required", "necessary", "approve", "review",
     "complete", "finish", "prepare", "urgent", "deadline", "due",
-    "asap", "request", "could you", "can you", "would you"
+    "asap", "request", "could you", "can you", "would you", "update",
+    "confirm", "verify", "respond", "reply"
 ]
 
 ALL_ACTION_VERBS = ACTION_VERBS_RU + ACTION_VERBS_EN
@@ -55,6 +71,7 @@ def extract_dates(text: str) -> List[str]:
     - DD/MM/YYYY, DD.MM.YYYY
     - YYYY-MM-DD
     - Relative: today, tomorrow, yesterday (RU/EN)
+    - Russian date deadlines: "до 15 января", "к 3 марта", "не позднее 20 декабря"
     
     Args:
         text: Text to analyze
@@ -77,7 +94,20 @@ def extract_dates(text: str) -> List[str]:
     matches_2 = re.findall(date_pattern_2, text)
     found_dates.extend(matches_2)
     
-    # Pattern 3: Relative dates
+    # Pattern 3: Russian date deadlines "до/к/не позднее [число] [месяц]"
+    ru_date_pattern = re.compile(
+        r'\b(до|к|не позднее)\s+(\d{1,2})\s+(январ[ья]|феврал[ья]|марта|апрел[ья]|ма[я-й]|'
+        r'июн[ья]|июл[ья]|август[а]?|сентябр[ья]|октябр[ья]|ноябр[ья]|декабр[ья])\b',
+        re.IGNORECASE
+    )
+    ru_date_matches = ru_date_pattern.findall(text)
+    for match in ru_date_matches:
+        # match is tuple: (prefix, day, month)
+        date_str = f"{match[0]} {match[1]} {match[2]}"
+        if date_str not in found_dates:
+            found_dates.append(date_str)
+    
+    # Pattern 4: Relative dates
     relative_dates_ru = ['сегодня', 'завтра', 'вчера', 'послезавтра']
     relative_dates_en = ['today', 'tomorrow', 'yesterday']
     all_relative = relative_dates_ru + relative_dates_en

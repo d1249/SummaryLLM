@@ -12,104 +12,28 @@ import structlog
 import pytz
 from jinja2 import Environment, FileSystemLoader
 
-try:
-    from json_repair import repair_json
-except ImportError:
-    # Fallback if json-repair not available
-    def repair_json(text: str) -> str:
-        return text
-
-def extract_json_from_text(text: str) -> str:
+def minimal_json_cleanup(text: str) -> str:
     """
-    Extract JSON from text using regex patterns as last resort.
-
+    Minimal JSON cleanup - only removes markdown blocks and trims.
+    
     Args:
-        text: Text that may contain JSON
-
+        text: Raw text that may contain JSON
+    
     Returns:
-        Extracted JSON string or original text
+        Cleaned text
     """
     import re
-
-    # Try to find JSON object/array
-    patterns = [
-        r'\{.*\}',  # Object
-        r'\[.*\]',  # Array
-    ]
-
-    for pattern in patterns:
-        matches = re.findall(pattern, text, re.DOTALL)
-        for match in matches:
-            # Try to parse this match as JSON
-            try:
-                json.loads(match)
-                return match
-            except:
-                continue
-
-    return text
-
-def advanced_json_repair(text: str) -> str:
-    """
-    Advanced JSON repair that handles common LLM JSON issues.
-
-    Args:
-        text: Raw text that should contain JSON
-
-    Returns:
-        Repaired JSON string
-    """
-    import re
-
-    # 1. Remove markdown code blocks if present
+    
+    # Remove markdown code blocks
     text = re.sub(r'```\s*json\s*', '', text)
-    text = re.sub(r'```\s*$', '', text)
-
-    # 2. Fix unterminated strings (common issue)
-    # Find strings that start but don't end properly
-    lines = text.split('\n')
-    fixed_lines = []
-    in_string = False
-    string_char = None
-
-    for line in lines:
-        if not in_string:
-            # Look for start of string
-            string_match = re.search(r'(["\'])(.*)$', line)
-            if string_match:
-                string_char = string_match.group(1)
-                content = string_match.group(2)
-                # Check if string ends on this line
-                if content.count(string_char) % 2 == 1:  # Odd number means unterminated
-                    line = line + string_char  # Close the string
-                    in_string = False
-                else:
-                    in_string = True
-            fixed_lines.append(line)
-        else:
-            # We're in a string, look for its end
-            if string_char in line:
-                in_string = False
-            fixed_lines.append(line)
-
-    text = '\n'.join(fixed_lines)
-
-    # 3. Fix missing commas between objects in arrays
-    # Pattern: } { -> },
-    text = re.sub(r'}\s*{', '}, {', text)
-
-    # 4. Fix trailing commas before closing brackets/braces
-    text = re.sub(r',(\s*[}\]])', r'\1', text)
-
-    # 5. Fix missing closing braces/brackets at end
-    open_braces = text.count('{') - text.count('}')
-    open_brackets = text.count('[') - text.count(']')
-
-    if open_braces > 0:
-        text += '}' * open_braces
-    if open_brackets > 0:
-        text += ']' * open_brackets
-
+    text = re.sub(r'```\s*', '', text)
+    text = text.strip()
+    
+    # Trim to last closing brace if present
+    if '}' in text:
+        last_brace = text.rfind('}')
+        text = text[:last_brace + 1]
+    
     return text
 
 try:
@@ -122,6 +46,8 @@ from digest_core.config import LLMConfig
 from digest_core.evidence.split import EvidenceChunk
 from digest_core.llm.schemas import Digest, EnhancedDigest
 from digest_core.llm.date_utils import get_current_datetime_in_tz
+from digest_core.llm.degrade import extractive_fallback
+from digest_core.privacy.masking import mask_text, validate_llm_output
 
 logger = structlog.get_logger()
 
@@ -129,8 +55,19 @@ logger = structlog.get_logger()
 class LLMGateway:
     """Client for LLM Gateway API with retry logic and schema validation."""
     
-    def __init__(self, config: LLMConfig):
+    def __init__(
+        self,
+        config: LLMConfig,
+        enable_degrade: bool = True,
+        degrade_mode: str = "extractive",
+        enforce_input_masking: bool = True,
+        enforce_output_masking: bool = True
+    ):
         self.config = config
+        self.enable_degrade = enable_degrade
+        self.degrade_mode = degrade_mode
+        self.enforce_input_masking = enforce_input_masking
+        self.enforce_output_masking = enforce_output_masking
         self.last_latency_ms = 0
         self.client = httpx.Client(
             timeout=httpx.Timeout(self.config.timeout_s),
@@ -253,7 +190,14 @@ Signals: action_verbs=[{action_verbs_str}]; dates=[{dates_str}]; contains_questi
 """
             evidence_parts.append(part)
         
-        return "\n".join(evidence_parts)
+        evidence_combined = "\n".join(evidence_parts)
+        
+        # Apply PII masking if enabled
+        if self.enforce_input_masking:
+            evidence_combined = mask_text(evidence_combined, enforce=True)
+            logger.info("Input PII masking applied", evidence_count=len(evidence))
+        
+        return evidence_combined
     
     @tenacity.retry(
         stop=tenacity.stop_after_attempt(2),  # Retry once on JSON errors
@@ -305,69 +249,52 @@ Signals: action_verbs=[{action_verbs_str}]; dates=[{dates_str}]; contains_questi
                     "data": {"sections": []}
                 }
             
-            # Try to parse JSON (handle markdown code blocks)
+            # Validate output for PII leakage if enabled
+            if self.enforce_output_masking:
+                try:
+                    validate_llm_output(content, enforce=True)
+                    logger.info("Output PII validation passed")
+                except ValueError as pii_err:
+                    logger.error("PII leakage detected in LLM output", error=str(pii_err))
+                    # Still proceed but log the violation
+                    # In production, might want to raise or redact
+            
+            # Try to parse JSON with minimal cleanup
             try:
-                # Strip markdown code blocks if present
-                content_stripped = content.strip()
-                if content_stripped.startswith("```"):
-                    # Extract JSON from markdown code block
-                    lines = content_stripped.split("\n")
-                    # Remove first line (```json or ```)
-                    lines = lines[1:]
-                    # Remove last line if it's ```
-                    if lines and lines[-1].strip() == "```":
-                        lines = lines[:-1]
-                    content_stripped = "\n".join(lines).strip()
+                # Clean markdown blocks
+                content_cleaned = minimal_json_cleanup(content)
                 
-                # Try to parse JSON first
+                # Try to parse JSON
                 try:
-                    parsed_content = json.loads(content_stripped)
-                except json.JSONDecodeError as e:
+                    parsed_content = json.loads(content_cleaned)
+                    
+                except json.JSONDecodeError as parse_err:
+                    error_msg = str(parse_err)
+                    preview = content[:300] if len(content) > 300 else content
+                    
                     logger.warning(
-                        "Invalid JSON in LLM response, attempting repair",
-                        error=str(e),
-                        content_preview=content[:500] if len(content) > 500 else content
+                        "Invalid JSON in LLM response",
+                        error=error_msg,
+                        preview=preview
                     )
-                    # Try to repair JSON using advanced repair
-                    try:
-                        # First try with advanced repair
-                        advanced_repaired = advanced_json_repair(content_stripped)
-                        parsed_content = json.loads(advanced_repaired)
-                        logger.info("JSON successfully repaired with advanced repair", original_error=str(e))
-                    except Exception as advanced_error:
-                        logger.warning(
-                            "Advanced JSON repair failed, trying json-repair library",
-                            advanced_error=str(advanced_error)
-                        )
-                try:
-                    # Fallback to json-repair library
-                    repaired_json = repair_json(content_stripped)
-                    parsed_content = json.loads(repaired_json)
-                    logger.info("JSON successfully repaired with json-repair library", original_error=str(e))
-                except Exception as library_error:
-                    logger.warning(
-                        "JSON repair failed, trying regex extraction",
-                        library_error=str(library_error)
-                    )
-                    try:
-                        # Last resort: extract JSON with regex
-                        extracted_json = extract_json_from_text(content_stripped)
-                        if extracted_json != content_stripped:
-                            parsed_content = json.loads(extracted_json)
-                            logger.info("JSON successfully extracted with regex", original_error=str(e))
-                        else:
-                            raise ValueError("No valid JSON found")
-                    except Exception as extract_error:
+                    
+                    # Check if strict mode is enabled
+                    if self.config.strict_json:
+                        # In strict mode, add hint and raise to trigger retry
+                        if "IMPORTANT: Return ONLY valid JSON" not in messages[0]["content"]:
+                            messages[0]["content"] = messages[0]["content"] + "\n\nIMPORTANT: Return ONLY valid JSON per schema. No markdown, no code blocks."
+                        raise ValueError(f"Invalid JSON in strict mode: {error_msg}")
+                    else:
+                        # Non-strict: return empty structure
                         logger.error(
-                            "All JSON repair methods failed, creating fallback digest",
-                            extract_error=str(extract_error),
-                            content_preview=content[:300] if len(content) > 300 else content
+                            "JSON parsing failed, returning empty digest",
+                            error=error_msg,
+                            preview=preview
                         )
-                        # Last resort: create empty digest instead of failing completely
                         parsed_content = {
                             "schema_version": "2.0",
                             "prompt_version": "v2",
-                            "digest_date": digest_date,
+                            "digest_date": digest_date if digest_date else "unknown",
                             "trace_id": trace_id,
                             "timezone": "America/Sao_Paulo",
                             "my_actions": [],
@@ -376,25 +303,13 @@ Signals: action_verbs=[{action_verbs_str}]; dates=[{dates_str}]; contains_questi
                             "risks_blockers": [],
                             "fyi": []
                         }
-                # Add retry instruction to system message
-                if "IMPORTANT: Return ONLY valid JSON" not in messages[0]["content"]:
-                    messages[0]["content"] = messages[0]["content"] + "\n\nIMPORTANT: Return ONLY valid JSON per schema. No markdown, no code blocks, no additional text."
-
-                # On second retry, use simplified prompt
-                if hasattr(self, '_retry_count'):
-                    self._retry_count = getattr(self, '_retry_count', 0) + 1
-                else:
-                    self._retry_count = 1
-
-                if self._retry_count >= 2:
-                    # Use simplified prompt for final retry
-                    messages[0]["content"] = self._get_simplified_prompt(messages[0]["content"])
-                    logger.info("Using simplified prompt for retry", retry_count=self._retry_count)
-
-                raise ValueError("Invalid JSON response")
-            except Exception as e:
-                logger.error("LLM request failed",
-                            error=str(e),
+                        
+            except ValueError as validation_err:
+                # Re-raise validation errors to trigger retry
+                raise
+            except Exception as unexpected_err:
+                logger.error("Unexpected LLM parsing error",
+                            error=str(unexpected_err),
                             trace_id=trace_id)
                 raise
             # Common header variants
@@ -634,6 +549,7 @@ Signals: action_verbs=[{action_verbs_str}]; dates=[{dates_str}]; contains_questi
     ) -> Dict[str, Any]:
         """
         Process evidence with enhanced v2 prompt and validation.
+        With degradation fallback on LLM failures.
         
         Args:
             evidence: List of evidence chunks
@@ -643,13 +559,52 @@ Signals: action_verbs=[{action_verbs_str}]; dates=[{dates_str}]; contains_questi
             custom_input: Custom input text (for hierarchical mode, replaces evidence)
         
         Returns:
-            Dict with digest, trace_id, and meta information
+            Dict with digest, trace_id, meta information, and partial flag
         """
         logger.info("Processing digest with enhanced prompt", 
                    evidence_count=len(evidence) if not custom_input else 0,
                    custom_input=bool(custom_input),
                    prompt_version=prompt_version,
                    trace_id=trace_id)
+        
+        try:
+            return self._process_digest_internal(evidence, digest_date, trace_id, prompt_version, custom_input)
+            
+        except Exception as llm_err:
+            logger.error("LLM digest processing failed",
+                        error=str(llm_err),
+                        trace_id=trace_id)
+            
+            if not self.enable_degrade or custom_input:
+                # Don't degrade hierarchical mode (custom_input) or if degrade disabled
+                raise
+            
+            # Use extractive fallback
+            logger.warning("Using extractive fallback for digest", trace_id=trace_id)
+            fallback_digest = extractive_fallback(
+                evidence,
+                digest_date,
+                trace_id,
+                reason="llm_processing_failed"
+            )
+            
+            return {
+                "trace_id": trace_id,
+                "digest": fallback_digest,
+                "meta": {},
+                "partial": True,
+                "reason": "llm_failed"
+            }
+    
+    def _process_digest_internal(
+        self,
+        evidence: List[EvidenceChunk], 
+        digest_date: str, 
+        trace_id: str, 
+        prompt_version: str = "v2",
+        custom_input: str = None
+    ) -> Dict[str, Any]:
+        """Internal digest processing without fallback logic."""
         
         # Use custom_input if provided (hierarchical mode), else prepare evidence text
         if custom_input:
@@ -757,53 +712,30 @@ Signals: action_verbs=[{action_verbs_str}]; dates=[{dates_str}]; contains_questi
         
         json_str = '\n'.join(json_lines)
         try:
-            parsed = json.loads(json_str)
-        except json.JSONDecodeError as e:
-            logger.warning("Invalid JSON in response, attempting repair", error=str(e), json_preview=json_str[:500])
-            try:
-                # First try with advanced repair
-                advanced_repaired = advanced_json_repair(json_str)
-                parsed = json.loads(advanced_repaired)
-                logger.info("JSON successfully repaired with advanced repair", original_error=str(e))
-            except Exception as advanced_error:
-                logger.warning(
-                    "Advanced JSON repair failed, trying json-repair library",
-                    advanced_error=str(advanced_error)
-                )
-                try:
-                    # Fallback to json-repair library
-                    repaired_json = repair_json(json_str)
-                    parsed = json.loads(repaired_json)
-                    logger.info("JSON successfully repaired with json-repair library", original_error=str(e))
-                except Exception as library_error:
-                    logger.warning(
-                        "JSON repair failed, trying regex extraction",
-                        library_error=str(library_error)
-                    )
-                    try:
-                        # Last resort: extract JSON with regex
-                        extracted_json = extract_json_from_text(json_str)
-                        if extracted_json != json_str:
-                            parsed = json.loads(extracted_json)
-                            logger.info("JSON successfully extracted with regex", original_error=str(e))
-                        else:
-                            raise ValueError("No valid JSON found")
-                    except Exception as extract_error:
-                        logger.error(
-                            "All JSON repair methods failed for thread summary, creating fallback",
-                            extract_error=str(extract_error),
-                            json_preview=json_str[:300] if len(json_str) > 300 else json_str
-                        )
-                        # Last resort: create empty thread summary instead of failing completely
-                        parsed = {
-                            "thread_id": "unknown",
-                            "summary": "Thread summary extraction failed",
-                            "pending_actions": [],
-                            "deadlines": [],
-                            "who_must_act": [],
-                            "open_questions": [],
-                            "evidence_ids": []
-                        }
+            # Minimal cleanup before parsing
+            json_cleaned = minimal_json_cleanup(json_str)
+            parsed = json.loads(json_cleaned)
+            
+        except json.JSONDecodeError as parse_err:
+            error_msg = str(parse_err)
+            preview = json_str[:300] if len(json_str) > 300 else json_str
+            
+            logger.error(
+                "Invalid JSON in enhanced response",
+                error=error_msg,
+                json_preview=preview
+            )
+            
+            # Create minimal fallback
+            parsed = {
+                "thread_id": "unknown",
+                "summary": "JSON parsing failed",
+                "pending_actions": [],
+                "deadlines": [],
+                "who_must_act": [],
+                "open_questions": [],
+                "evidence_ids": []
+            }
         
         # Add markdown if present
         if markdown_lines:

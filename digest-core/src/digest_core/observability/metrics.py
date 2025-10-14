@@ -118,6 +118,39 @@ class MetricsCollector:
             ['error_type', 'stage'],  # validation_error, llm_error, etc.
             registry=self.registry
         )
+        
+        # New metrics for robustness features
+        self.llm_json_errors_total = Counter(
+            'llm_json_errors_total',
+            'Total LLM JSON parsing errors',
+            registry=self.registry
+        )
+        
+        self.llm_repair_fail_total = Counter(
+            'llm_repair_fail_total',
+            'Total LLM JSON repair failures',
+            registry=self.registry
+        )
+        
+        self.masking_violations_total = Counter(
+            'masking_violations_total',
+            'Total PII masking violations detected',
+            ['direction'],  # input, output
+            registry=self.registry
+        )
+        
+        self.tz_naive_total = Counter(
+            'tz_naive_total',
+            'Total naive datetime encounters',
+            registry=self.registry
+        )
+        
+        self.degrade_activated_total = Counter(
+            'degrade_activated_total',
+            'Total degradation activations',
+            ['reason'],  # llm_failed, json_invalid, etc.
+            registry=self.registry
+        )
     
     def record_llm_latency(self, latency_ms: float):
         """Record LLM request latency."""
@@ -247,6 +280,31 @@ class MetricsCollector:
                 'error': str(e),
                 'timestamp': time.time()
             }
+    
+    def record_llm_json_error(self):
+        """Record LLM JSON parsing error."""
+        self.llm_json_errors_total.inc()
+        logger.debug("Recorded LLM JSON error")
+    
+    def record_llm_repair_failure(self):
+        """Record LLM JSON repair failure."""
+        self.llm_repair_fail_total.inc()
+        logger.debug("Recorded LLM JSON repair failure")
+    
+    def record_masking_violation(self, direction: str):
+        """Record PII masking violation."""
+        self.masking_violations_total.labels(direction=direction).inc()
+        logger.debug("Recorded masking violation", direction=direction)
+    
+    def record_tz_naive(self):
+        """Record naive datetime encounter."""
+        self.tz_naive_total.inc()
+        logger.debug("Recorded naive datetime encounter")
+    
+    def record_degradation(self, reason: str):
+        """Record degradation activation."""
+        self.degrade_activated_total.labels(reason=reason).inc()
+        logger.debug("Recorded degradation", reason=reason)
     
     def get_metric_values(self) -> Dict[str, Any]:
         """Get current metric values for debugging."""

@@ -52,6 +52,8 @@ class JSONAssembler:
             "prompt_version": digest_data.prompt_version,
             "digest_date": digest_data.digest_date,
             "trace_id": digest_data.trace_id,
+            "total_emails_processed": digest_data.total_emails_processed,
+            "emails_with_actions": digest_data.emails_with_actions,
             "sections": [
                 {
                     "title": section.title,
@@ -62,7 +64,8 @@ class JSONAssembler:
                             "due": item.due,
                             "evidence_id": item.evidence_id,
                             "confidence": item.confidence,
-                            "source_ref": item.source_ref
+                            "source_ref": item.source_ref,
+                            "email_subject": item.email_subject
                         }
                         for item in section.items
                     ]
@@ -110,7 +113,8 @@ class JSONAssembler:
                     due=item_dict.get("due"),
                     evidence_id=item_dict["evidence_id"],
                     confidence=item_dict["confidence"],
-                    source_ref=item_dict["source_ref"]
+                    source_ref=item_dict["source_ref"],
+                    email_subject=item_dict.get("email_subject")
                 )
                 items.append(item)
             
@@ -125,7 +129,9 @@ class JSONAssembler:
             prompt_version=digest_dict.get("prompt_version", "extract_actions.v1"),
             digest_date=digest_dict["digest_date"],
             trace_id=digest_dict["trace_id"],
-            sections=sections
+            sections=sections,
+            total_emails_processed=digest_dict.get("total_emails_processed", 0),
+            emails_with_actions=digest_dict.get("emails_with_actions", 0)
         )
     
     def validate_digest(self, digest_data: Digest) -> bool:
@@ -228,6 +234,10 @@ class JSONAssembler:
                 "trace_id",
                 "sections"
             ],
+            "optional_fields": [
+                "total_emails_processed",
+                "emails_with_actions"
+            ],
             "section_required_fields": [
                 "title",
                 "items"
@@ -240,7 +250,8 @@ class JSONAssembler:
             ],
             "item_optional_fields": [
                 "owners_masked",
-                "due"
+                "due",
+                "email_subject"
             ],
             "date_format": "YYYY-MM-DD",
             "confidence_range": [0, 1]

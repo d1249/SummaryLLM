@@ -209,6 +209,49 @@ def run_digest(from_date: str, sources: List[str], out: str, model: str, window:
             digest_data = digest
             prompt_version = "v2_hierarchical"
             
+            # Enrich items with email subjects and collect statistics
+            evidence_to_subject = {chunk.evidence_id: chunk.message_metadata.get("subject", "") 
+                                  for chunk in evidence_chunks}
+            unique_msg_ids = set()
+            
+            # Enrich all action types
+            for action in digest_data.my_actions + digest_data.others_actions:
+                action.email_subject = evidence_to_subject.get(action.evidence_id, "")
+                # Track msg_ids by looking up the chunk
+                for chunk in evidence_chunks:
+                    if chunk.evidence_id == action.evidence_id:
+                        if chunk.source_ref.get("msg_id"):
+                            unique_msg_ids.add(chunk.source_ref["msg_id"])
+                        break
+            
+            for item in digest_data.deadlines_meetings:
+                item.email_subject = evidence_to_subject.get(item.evidence_id, "")
+                for chunk in evidence_chunks:
+                    if chunk.evidence_id == item.evidence_id:
+                        if chunk.source_ref.get("msg_id"):
+                            unique_msg_ids.add(chunk.source_ref["msg_id"])
+                        break
+            
+            for item in digest_data.risks_blockers:
+                item.email_subject = evidence_to_subject.get(item.evidence_id, "")
+                for chunk in evidence_chunks:
+                    if chunk.evidence_id == item.evidence_id:
+                        if chunk.source_ref.get("msg_id"):
+                            unique_msg_ids.add(chunk.source_ref["msg_id"])
+                        break
+            
+            for item in digest_data.fyi:
+                item.email_subject = evidence_to_subject.get(item.evidence_id, "")
+                for chunk in evidence_chunks:
+                    if chunk.evidence_id == item.evidence_id:
+                        if chunk.source_ref.get("msg_id"):
+                            unique_msg_ids.add(chunk.source_ref["msg_id"])
+                        break
+            
+            # Add statistics
+            digest_data.total_emails_processed = len(messages)
+            digest_data.emails_with_actions = len(unique_msg_ids)
+            
         else:
             logger.info("Using flat mode (below thresholds)",
                        threads=len(threads),
@@ -236,6 +279,23 @@ def run_digest(from_date: str, sources: List[str], out: str, model: str, window:
                 trace_id=trace_id,
                 sections=llm_response.get("sections", [])
             )
+            
+            # Enrich items with email subjects and collect statistics
+            evidence_to_subject = {chunk.evidence_id: chunk.message_metadata.get("subject", "") 
+                                  for chunk in evidence_chunks}
+            unique_msg_ids = set()
+            
+            for section in digest_data.sections:
+                for item in section.items:
+                    # Add email subject
+                    item.email_subject = evidence_to_subject.get(item.evidence_id, "")
+                    # Track unique msg_ids for statistics
+                    if item.source_ref.get("msg_id"):
+                        unique_msg_ids.add(item.source_ref["msg_id"])
+            
+            # Add statistics
+            digest_data.total_emails_processed = len(messages)
+            digest_data.emails_with_actions = len(unique_msg_ids)
         
         # Metrics for LLM
         if use_hierarchical:

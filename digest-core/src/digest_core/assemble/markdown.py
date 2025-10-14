@@ -77,8 +77,12 @@ class MarkdownAssembler:
                 confidence_text = self._format_confidence(item.confidence)
                 lines.append(f"**Уверенность:** {confidence_text}")
                 
-                # Add evidence reference (required format)
-                lines.append(f"**Источник:** {item.source_ref.get('type', 'unknown')}, evidence {item.evidence_id}")
+                # Add evidence reference (required format) with email subject
+                source_type = item.source_ref.get('type', 'unknown')
+                if item.email_subject:
+                    lines.append(f"**Источник:** {source_type}, тема \"{item.email_subject}\", evidence {item.evidence_id}")
+                else:
+                    lines.append(f"**Источник:** {source_type}, evidence {item.evidence_id}")
                 
                 # Add owners if present
                 if item.owners_masked:
@@ -92,6 +96,14 @@ class MarkdownAssembler:
                 remaining = len(section.items) - self.max_items_per_section
                 lines.append(f"*... и еще {remaining} элементов*")
                 lines.append("")
+        
+        # Statistics section
+        if digest_data.total_emails_processed > 0:
+            lines.append("## Статистика")
+            lines.append("")
+            percent = int((digest_data.emails_with_actions / digest_data.total_emails_processed) * 100) if digest_data.total_emails_processed > 0 else 0
+            lines.append(f"Обработано {digest_data.total_emails_processed} писем, {digest_data.emails_with_actions} ({percent}%) содержали действия")
+            lines.append("")
         
         # Evidence section
         lines.append("## Источники")
@@ -272,7 +284,11 @@ class MarkdownAssembler:
                     lines.append(f"**Актёры:** {', '.join(action.actors)}")
                 if action.response_channel:
                     lines.append(f"**Канал ответа:** {action.response_channel}")
-                lines.append(f"**Источник:** Evidence {action.evidence_id}")
+                # Add source with email subject
+                if action.email_subject:
+                    lines.append(f"**Источник:** тема \"{action.email_subject}\", evidence {action.evidence_id}")
+                else:
+                    lines.append(f"**Источник:** Evidence {action.evidence_id}")
                 lines.append(f'**Цитата:** "{action.quote}"')
                 lines.append("")
         
@@ -289,7 +305,11 @@ class MarkdownAssembler:
                 lines.append(f"**Уверенность:** {action.confidence}")
                 if action.actors:
                     lines.append(f"**Актёры:** {', '.join(action.actors)}")
-                lines.append(f"**Источник:** Evidence {action.evidence_id}")
+                # Add source with email subject
+                if action.email_subject:
+                    lines.append(f"**Источник:** тема \"{action.email_subject}\", evidence {action.evidence_id}")
+                else:
+                    lines.append(f"**Источник:** Evidence {action.evidence_id}")
                 lines.append(f'**Цитата:** "{action.quote}"')
                 lines.append("")
         
@@ -305,7 +325,11 @@ class MarkdownAssembler:
                     lines.append(f"**Место:** {item.location}")
                 if item.participants:
                     lines.append(f"**Участники:** {', '.join(item.participants)}")
-                lines.append(f"**Источник:** Evidence {item.evidence_id}")
+                # Add source with email subject
+                if item.email_subject:
+                    lines.append(f"**Источник:** тема \"{item.email_subject}\", evidence {item.evidence_id}")
+                else:
+                    lines.append(f"**Источник:** Evidence {item.evidence_id}")
                 lines.append(f'**Цитата:** "{item.quote}"')
                 lines.append("")
         
@@ -317,7 +341,11 @@ class MarkdownAssembler:
                 lines.append(f"### {i}. {item.title}")
                 lines.append(f"**Серьёзность:** {item.severity}")
                 lines.append(f"**Влияние:** {item.impact}")
-                lines.append(f"**Источник:** Evidence {item.evidence_id}")
+                # Add source with email subject
+                if item.email_subject:
+                    lines.append(f"**Источник:** тема \"{item.email_subject}\", evidence {item.evidence_id}")
+                else:
+                    lines.append(f"**Источник:** Evidence {item.evidence_id}")
                 lines.append(f'**Цитата:** "{item.quote}"')
                 lines.append("")
         
@@ -329,9 +357,21 @@ class MarkdownAssembler:
                 lines.append(f"### {i}. {item.title}")
                 if item.category:
                     lines.append(f"**Категория:** {item.category}")
-                lines.append(f"**Источник:** Evidence {item.evidence_id}")
+                # Add source with email subject
+                if item.email_subject:
+                    lines.append(f"**Источник:** тема \"{item.email_subject}\", evidence {item.evidence_id}")
+                else:
+                    lines.append(f"**Источник:** Evidence {item.evidence_id}")
                 lines.append(f'**Цитата:** "{item.quote}"')
                 lines.append("")
+        
+        # Statistics section
+        if digest.total_emails_processed > 0:
+            lines.append("## Статистика")
+            lines.append("")
+            percent = int((digest.emails_with_actions / digest.total_emails_processed) * 100) if digest.total_emails_processed > 0 else 0
+            lines.append(f"Обработано {digest.total_emails_processed} писем, {digest.emails_with_actions} ({percent}%) содержали действия")
+            lines.append("")
         
         # Add markdown summary if present
         if digest.markdown_summary:

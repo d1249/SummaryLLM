@@ -9,6 +9,7 @@ class Item(BaseModel):
     evidence_id: str
     confidence: float
     source_ref: Dict[str, Any]
+    email_subject: Optional[str] = None
 
 class Section(BaseModel):
     title: str
@@ -20,6 +21,8 @@ class Digest(BaseModel):
     digest_date: str
     trace_id: str
     sections: List[Section]
+    total_emails_processed: int = 0
+    emails_with_actions: int = 0
 
 
 # Enhanced v2 models
@@ -35,6 +38,7 @@ class ActionItem(BaseModel):
     actors: List[str] = Field(default_factory=list, description="People involved")
     confidence: str = Field(description="High/Medium/Low")
     response_channel: Optional[str] = Field(None, description="email/slack/meeting")
+    email_subject: Optional[str] = None
 
 
 class DeadlineMeeting(BaseModel):
@@ -46,6 +50,7 @@ class DeadlineMeeting(BaseModel):
     date_label: Optional[str] = Field(None, description="'today'/'tomorrow' if applicable")
     location: Optional[str] = None
     participants: List[str] = Field(default_factory=list)
+    email_subject: Optional[str] = None
 
 
 class RiskBlocker(BaseModel):
@@ -55,6 +60,7 @@ class RiskBlocker(BaseModel):
     quote: str
     severity: str = Field(description="High/Medium/Low")
     impact: str
+    email_subject: Optional[str] = None
 
 
 class FYIItem(BaseModel):
@@ -63,6 +69,7 @@ class FYIItem(BaseModel):
     evidence_id: str
     quote: str
     category: Optional[str] = None
+    email_subject: Optional[str] = None
 
 
 class EnhancedDigest(BaseModel):
@@ -82,6 +89,10 @@ class EnhancedDigest(BaseModel):
     
     # Markdown summary (generated after JSON)
     markdown_summary: Optional[str] = Field(None, description="Brief markdown summary")
+    
+    # Statistics
+    total_emails_processed: int = 0
+    emails_with_actions: int = 0
 
 
 # Hierarchical mode models

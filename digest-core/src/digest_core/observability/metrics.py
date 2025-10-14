@@ -250,6 +250,21 @@ class MetricsCollector:
             ['chunk_type'],  # mentions, last_update
             registry=self.registry
         )
+        
+        # HTML normalization metrics
+        self.html_parse_errors_total = Counter(
+            'html_parse_errors_total',
+            'Total HTML parsing errors',
+            ['error_type'],  # bs4_error, malformed_html, fallback_used
+            registry=self.registry
+        )
+        
+        self.html_hidden_removed_total = Counter(
+            'html_hidden_removed_total',
+            'Total hidden elements removed from HTML',
+            ['element_type'],  # tracking_pixel, display_none, visibility_hidden, style_script_svg
+            registry=self.registry
+        )
     
     def record_llm_latency(self, latency_ms: float):
         """Record LLM request latency."""
@@ -393,6 +408,16 @@ class MetricsCollector:
         self.must_include_chunks_total.labels(chunk_type=chunk_type).inc(count)
         logger.debug("Recorded must-include chunk", chunk_type=chunk_type, count=count)
     
+    def record_html_parse_error(self, error_type: str):
+        """Record HTML parsing error."""
+        self.html_parse_errors_total.labels(error_type=error_type).inc()
+        logger.debug("Recorded HTML parse error", error_type=error_type)
+    
+    def record_html_hidden_removed(self, element_type: str, count: int = 1):
+        """Record hidden HTML element removed."""
+        self.html_hidden_removed_total.labels(element_type=element_type).inc(count)
+        logger.debug("Recorded hidden element removed", element_type=element_type, count=count)
+    
     def update_system_metrics(self):
         """Update system metrics."""
         uptime = time.time() - self.start_time
@@ -443,7 +468,9 @@ class MetricsCollector:
                 'hierarchical_runs_total',
                 'avg_subsummary_chunks',
                 'saved_tokens_total',
-                'must_include_chunks_total'
+                'must_include_chunks_total',
+                'html_parse_errors_total',
+                'html_hidden_removed_total'
             ]
         }
     

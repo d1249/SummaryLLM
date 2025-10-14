@@ -180,12 +180,6 @@ class HierarchicalConfig(BaseModel):
     max_cost_increase_per_email_pct: int = Field(default=40, description="Max acceptable cost increase per email %")
 
 
-class MaskingConfig(BaseModel):
-    """Configuration for PII masking."""
-    enforce_input: bool = Field(default=True, description="Enforce PII masking before LLM")
-    enforce_output: bool = Field(default=True, description="Validate no PII in LLM output")
-
-
 class DegradeConfig(BaseModel):
     """Configuration for LLM failure degradation."""
     enable: bool = Field(default=True, description="Enable degradation on LLM failures")
@@ -206,7 +200,6 @@ class Config(BaseSettings):
     chunking: ChunkingConfig = Field(default_factory=ChunkingConfig)
     shrink: ShrinkConfig = Field(default_factory=ShrinkConfig)
     hierarchical: HierarchicalConfig = Field(default_factory=HierarchicalConfig)
-    masking: MaskingConfig = Field(default_factory=MaskingConfig)
     degrade: DegradeConfig = Field(default_factory=DegradeConfig)
     
     class Config:
@@ -307,8 +300,6 @@ class Config(BaseSettings):
             self.shrink = ShrinkConfig(**yaml_config['shrink'])
         if 'hierarchical' in yaml_config:
             self.hierarchical = HierarchicalConfig(**yaml_config['hierarchical'])
-        if 'masking' in yaml_config:
-            self.masking = MaskingConfig(**yaml_config['masking'])
         if 'degrade' in yaml_config:
             self.degrade = DegradeConfig(**yaml_config['degrade'])
     

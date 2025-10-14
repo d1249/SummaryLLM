@@ -37,11 +37,11 @@
   "hash_sha1": "...",
   "evidence_spans": [{"offset_start": 123, "offset_end": 168, "confidence": 0.94}],
   "lang": "ru|en",
-  "pii_flags": ["phone","email"],
   "risk_level": "low|med|high",
-  "pipeline_version": "1.0.0",
-  "prompt_version": "mvp.3",
+  "pipeline_version": "1.1.0",
+  "prompt_version": "mvp.5",
   "model_id": "llm-xyz-2025-09",
+  "schema_version": "3.0",
   "consent_id": "… (только для DM)"
 }
 ```
@@ -95,7 +95,7 @@ _ingest → normalize → dedup/threading → evidence-extract → summarize (LL
     
 - Генерация T90 ≤ 60 сек при ≤ 50 письмах.
     
-- Зафиксированы `pipeline_version`, `prompt_version`, `model_id`.
+- Зафиксированы `pipeline_version` (1.1.0), `prompt_version` (mvp.5), `schema_version` (3.0), `model_id`.
     
 
 ---

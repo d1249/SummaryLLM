@@ -44,10 +44,10 @@ except ImportError:
 
 from digest_core.config import LLMConfig
 from digest_core.evidence.split import EvidenceChunk
-from digest_core.llm.schemas import Digest, EnhancedDigest
+from digest_core.llm.schemas import Digest, EnhancedDigest, EnhancedDigestV3
 from digest_core.llm.date_utils import get_current_datetime_in_tz
 from digest_core.llm.degrade import extractive_fallback
-from digest_core.privacy.masking import mask_text, validate_llm_output
+from digest_core.observability.metrics import MetricsCollector
 
 logger = structlog.get_logger()
 
@@ -60,14 +60,12 @@ class LLMGateway:
         config: LLMConfig,
         enable_degrade: bool = True,
         degrade_mode: str = "extractive",
-        enforce_input_masking: bool = True,
-        enforce_output_masking: bool = True
+        metrics: MetricsCollector = None
     ):
         self.config = config
         self.enable_degrade = enable_degrade
         self.degrade_mode = degrade_mode
-        self.enforce_input_masking = enforce_input_masking
-        self.enforce_output_masking = enforce_output_masking
+        self.metrics = metrics
         self.last_latency_ms = 0
         self.client = httpx.Client(
             timeout=httpx.Timeout(self.config.timeout_s),
@@ -192,11 +190,6 @@ Signals: action_verbs=[{action_verbs_str}]; dates=[{dates_str}]; contains_questi
         
         evidence_combined = "\n".join(evidence_parts)
         
-        # Apply PII masking if enabled
-        if self.enforce_input_masking:
-            evidence_combined = mask_text(evidence_combined, enforce=True)
-            logger.info("Input PII masking applied", evidence_count=len(evidence))
-        
         return evidence_combined
     
     @tenacity.retry(
@@ -253,16 +246,6 @@ Signals: action_verbs=[{action_verbs_str}]; dates=[{dates_str}]; contains_questi
                     "data": {"sections": []}
                 }
             
-            # Validate output for PII leakage if enabled
-            if self.enforce_output_masking:
-                try:
-                    validate_llm_output(content, enforce=True)
-                    logger.info("Output PII validation passed")
-                except ValueError as pii_err:
-                    logger.error("PII leakage detected in LLM output", error=str(pii_err))
-                    # Still proceed but log the violation
-                    # In production, might want to raise or redact
-            
             # Try to parse JSON with minimal cleanup
             try:
                 # Clean markdown blocks
@@ -276,7 +259,11 @@ Signals: action_verbs=[{action_verbs_str}]; dates=[{dates_str}]; contains_questi
                     error_msg = str(parse_err)
                     preview = content[:300] if len(content) > 300 else content
                     
-                    logger.warning(
+                    # Record JSON error metric
+                    if self.metrics:
+                        self.metrics.record_llm_json_error()
+                    
+                    logger.error(
                         "Invalid JSON in LLM response",
                         error=error_msg,
                         preview=preview
@@ -289,27 +276,11 @@ Signals: action_verbs=[{action_verbs_str}]; dates=[{dates_str}]; contains_questi
                             messages[0]["content"] = messages[0]["content"] + "\n\nIMPORTANT: Return ONLY valid JSON per schema. No markdown, no code blocks."
                         raise ValueError(f"Invalid JSON in strict mode: {error_msg}")
                     else:
-                        # Non-strict: return empty structure
-                        logger.error(
-                            "JSON parsing failed, returning empty digest",
-                            error=error_msg,
-                            preview=preview
-                        )
-                        parsed_content = {
-                            "schema_version": "2.0",
-                            "prompt_version": "v2",
-                            "digest_date": digest_date if digest_date else "unknown",
-                            "trace_id": trace_id,
-                            "timezone": "America/Sao_Paulo",
-                            "my_actions": [],
-                            "others_actions": [],
-                            "deadlines_meetings": [],
-                            "risks_blockers": [],
-                            "fyi": []
-                        }
+                        # Always raise to trigger fallback mechanism
+                        raise ValueError(f"Invalid JSON from LLM: {error_msg}")
                         
             except ValueError as validation_err:
-                # Re-raise validation errors to trigger retry
+                # Re-raise validation errors to trigger retry or fallback
                 raise
             except Exception as unexpected_err:
                 logger.error("Unexpected LLM parsing error",
@@ -430,7 +401,6 @@ Signals: action_verbs=[{action_verbs_str}]; dates=[{dates_str}]; contains_questi
         
         return {
             "title": item["title"],
-            "owners_masked": item.get("owners_masked", []),
             "due": item.get("due"),
             "evidence_id": evidence_id,
             "confidence": confidence,
@@ -545,11 +515,11 @@ Signals: action_verbs=[{action_verbs_str}]; dates=[{dates_str}]; contains_questi
         }
     
     def process_digest(
-        self, 
-        evidence: List[EvidenceChunk], 
-        digest_date: str, 
+        self,
+        evidence: List[EvidenceChunk],
+        digest_date: str,
         trace_id: str, 
-        prompt_version: str = "v2",
+        prompt_version: str = "mvp.5",
         custom_input: str = None
     ) -> Dict[str, Any]:
         """
@@ -584,13 +554,20 @@ Signals: action_verbs=[{action_verbs_str}]; dates=[{dates_str}]; contains_questi
                 # Don't degrade hierarchical mode (custom_input) or if degrade disabled
                 raise
             
+            # Determine reason for degradation
+            reason = "llm_json_error" if "JSON" in str(llm_err) else "llm_processing_failed"
+            
+            # Record degradation metric
+            if self.metrics:
+                self.metrics.record_degradation(reason)
+            
             # Use extractive fallback
-            logger.warning("Using extractive fallback for digest", trace_id=trace_id)
+            logger.warning("Using extractive fallback for digest", trace_id=trace_id, reason=reason)
             fallback_digest = extractive_fallback(
                 evidence,
                 digest_date,
                 trace_id,
-                reason="llm_processing_failed"
+                reason=reason
             )
             
             return {
@@ -598,7 +575,7 @@ Signals: action_verbs=[{action_verbs_str}]; dates=[{dates_str}]; contains_questi
                 "digest": fallback_digest,
                 "meta": {},
                 "partial": True,
-                "reason": "llm_failed"
+                "reason": reason
             }
     
     def _process_digest_internal(
@@ -606,7 +583,7 @@ Signals: action_verbs=[{action_verbs_str}]; dates=[{dates_str}]; contains_questi
         evidence: List[EvidenceChunk], 
         digest_date: str, 
         trace_id: str, 
-        prompt_version: str = "v2",
+        prompt_version: str = "mvp.5",
         custom_input: str = None
     ) -> Dict[str, Any]:
         """Internal digest processing without fallback logic."""
@@ -652,11 +629,14 @@ Signals: action_verbs=[{action_verbs_str}]; dates=[{dates_str}]; contains_questi
             logger.warning("jsonschema not available, skipping validation")
             validated = parsed
         
-        # Convert to Pydantic model
+        # Convert to Pydantic model - use V3 for mvp.5, otherwise V2
         try:
-            digest = EnhancedDigest(**validated)
+            if prompt_version in ["mvp.5", "mvp5"]:
+                digest = EnhancedDigestV3(**validated)
+            else:
+                digest = EnhancedDigest(**validated)
         except Exception as e:
-            logger.error("Failed to parse as EnhancedDigest", error=str(e))
+            logger.error("Failed to parse digest", error=str(e), prompt_version=prompt_version)
             raise ValueError(f"Invalid digest structure: {e}")
         
         logger.info("Digest processing completed",
@@ -725,22 +705,18 @@ Signals: action_verbs=[{action_verbs_str}]; dates=[{dates_str}]; contains_questi
             error_msg = str(parse_err)
             preview = json_str[:300] if len(json_str) > 300 else json_str
             
+            # Record JSON error metric
+            if self.metrics:
+                self.metrics.record_llm_json_error()
+            
             logger.error(
                 "Invalid JSON in enhanced response",
                 error=error_msg,
                 json_preview=preview
             )
             
-            # Create minimal fallback
-            parsed = {
-                "thread_id": "unknown",
-                "summary": "JSON parsing failed",
-                "pending_actions": [],
-                "deadlines": [],
-                "who_must_act": [],
-                "open_questions": [],
-                "evidence_ids": []
-            }
+            # Raise error to trigger fallback mechanism
+            raise ValueError(f"Invalid JSON in enhanced response: {error_msg}")
         
         # Add markdown if present
         if markdown_lines:
@@ -763,7 +739,7 @@ Signals: action_verbs=[{action_verbs_str}]; dates=[{dates_str}]; contains_questi
         Raises:
             ValueError: If validation fails
         """
-        # Define JSON schema
+        # Define JSON schema (supports both V2 and V3)
         action_item_schema = {
             "type": "object",
             "required": ["title", "description", "evidence_id", "quote", "confidence"],
@@ -776,6 +752,7 @@ Signals: action_verbs=[{action_verbs_str}]; dates=[{dates_str}]; contains_questi
                 "due_date_normalized": {"type": ["string", "null"]},
                 "due_date_label": {"type": ["string", "null"]},
                 "actors": {"type": "array", "items": {"type": "string"}},
+                "owners": {"type": "array", "items": {"type": "string"}},
                 "confidence": {"type": "string", "enum": ["High", "Medium", "Low"]},
                 "response_channel": {"type": ["string", "null"]}
             }
@@ -824,7 +801,8 @@ Signals: action_verbs=[{action_verbs_str}]; dates=[{dates_str}]; contains_questi
                             "evidence_id": {"type": "string"},
                             "quote": {"type": "string", "minLength": 10},
                             "severity": {"type": "string"},
-                            "impact": {"type": "string"}
+                            "impact": {"type": "string"},
+                            "owners": {"type": "array", "items": {"type": "string"}}
                         }
                     }
                 },

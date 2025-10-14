@@ -160,7 +160,6 @@ class TestEmptyDayValidation:
                     items=[
                         Item(
                             title="Newsletter",
-                            owners_masked=[],
                             due=None,
                             evidence_id="ev-newsletter-001",
                             confidence=0.1,

@@ -8,6 +8,10 @@ from pathlib import Path
 from typing import List
 import uuid
 
+# Pipeline version - bumped to 1.1.0 (breaking: removed PII)
+PIPELINE_VERSION = "1.1.0"
+DEFAULT_PROMPT_VERSION = "mvp.5"
+
 from digest_core.config import Config
 from digest_core.ingest.ews import EWSIngest
 from digest_core.normalize.html import HTMLNormalizer
@@ -114,7 +118,7 @@ def run_digest(from_date: str, sources: List[str], out: str, model: str, window:
     try:
         # Step 1: Ingest emails from EWS
         logger.info("Starting email ingestion", stage="ingest")
-        ingest = EWSIngest(config.ews)
+        ingest = EWSIngest(config.ews, time_config=config.time, metrics=metrics)
         messages = ingest.fetch_messages(digest_date, config.time)
         logger.info("Email ingestion completed", emails_fetched=len(messages))
         metrics.record_emails_total(len(messages), "fetched")
@@ -231,11 +235,15 @@ def run_digest(from_date: str, sources: List[str], out: str, model: str, window:
         
         # Step 6: Process with LLM
         logger.info("Starting LLM processing", stage="llm")
-        llm_gateway = LLMGateway(config.llm)
+        llm_gateway = LLMGateway(config.llm, metrics=metrics)
         
         # NEW: Check if hierarchical mode should be used
         hierarchical_processor = HierarchicalProcessor(config.hierarchical, llm_gateway)
         use_hierarchical = hierarchical_processor.should_use_hierarchical(threads, messages)
+        
+        # Initialize partial flags
+        is_partial = False
+        partial_reason = None
         
         if use_hierarchical:
             logger.info("Using hierarchical mode",
@@ -243,21 +251,45 @@ def run_digest(from_date: str, sources: List[str], out: str, model: str, window:
                        emails=len(messages),
                        trace_id=trace_id)
             
-            # Hierarchical processing: per-thread summaries → final aggregation
-            digest = hierarchical_processor.process_hierarchical(
-                threads=threads,
-                all_chunks=evidence_chunks,
-                digest_date=digest_date,
-                trace_id=trace_id
-            )
-            
-            # Log hierarchical metrics
-            h_metrics = hierarchical_processor.metrics.to_dict()
-            logger.info("Hierarchical processing completed", **h_metrics)
-            
-            # Use EnhancedDigest (v2)
-            digest_data = digest
-            prompt_version = "v2_hierarchical"
+            try:
+                # Hierarchical processing: per-thread summaries → final aggregation
+                digest = hierarchical_processor.process_hierarchical(
+                    threads=threads,
+                    all_chunks=evidence_chunks,
+                    digest_date=digest_date,
+                    trace_id=trace_id
+                )
+                
+                # Log hierarchical metrics
+                h_metrics = hierarchical_processor.metrics.to_dict()
+                logger.info("Hierarchical processing completed", **h_metrics)
+                
+                # Use EnhancedDigest (v2)
+                digest_data = digest
+                prompt_version = "v2_hierarchical"
+                
+            except Exception as hierarchical_err:
+                logger.error("Hierarchical processing failed, using fallback",
+                           error=str(hierarchical_err),
+                           trace_id=trace_id)
+                
+                # Determine reason for degradation
+                reason = "llm_json_error" if "JSON" in str(hierarchical_err) else "llm_processing_failed"
+                
+                # Record degradation metric
+                metrics.record_degradation(reason)
+                
+                # Use extractive fallback
+                digest_data = extractive_fallback(
+                    evidence_chunks=evidence_chunks,
+                    digest_date=digest_date,
+                    trace_id=trace_id,
+                    reason=reason
+                )
+                
+                prompt_version = "extractive_fallback"
+                is_partial = True
+                partial_reason = reason
             
             # Enrich items with email subjects and collect statistics
             evidence_to_subject = {chunk.evidence_id: chunk.message_metadata.get("subject", "") 
@@ -307,45 +339,92 @@ def run_digest(from_date: str, sources: List[str], out: str, model: str, window:
                        threads=len(threads),
                        emails=len(messages))
             
-            # Load prompts (switch to EN prompt for qwen models)
-            prompts_dir = Path("prompts")
-            model_lower = (config.llm.model or "").lower()
-            extract_prompt_name = "extract_actions.en.v1.j2" if "qwen" in model_lower else "extract_actions.v1.j2"
-            extract_prompt = (prompts_dir / extract_prompt_name).read_text()
-            prompt_version = "extract_actions.en.v1" if "qwen" in model_lower else "extract_actions.v1"
-            
-            # Send to LLM and validate response
-            llm_response = llm_gateway.extract_actions(
-                evidence=selected_evidence,
-                prompt_template=extract_prompt,
-                trace_id=trace_id
-            )
-            
-            # Validate response against schema
-            digest_data = Digest(
-                schema_version="1.0",
-                prompt_version=prompt_version,
-                digest_date=digest_date,
-                trace_id=trace_id,
-                sections=llm_response.get("sections", [])
-            )
+            try:
+                # Load prompts (switch to EN prompt for qwen models)
+                prompts_dir = Path("prompts")
+                model_lower = (config.llm.model or "").lower()
+                extract_prompt_name = "extract_actions.en.v1.j2" if "qwen" in model_lower else "extract_actions.v1.j2"
+                extract_prompt = (prompts_dir / extract_prompt_name).read_text()
+                prompt_version = "extract_actions.en.v1" if "qwen" in model_lower else "extract_actions.v1"
+                
+                # Send to LLM and validate response
+                llm_response = llm_gateway.extract_actions(
+                    evidence=selected_evidence,
+                    prompt_template=extract_prompt,
+                    trace_id=trace_id
+                )
+                
+                # Validate response against schema
+                digest_data = Digest(
+                    schema_version="1.0",
+                    prompt_version=prompt_version,
+                    digest_date=digest_date,
+                    trace_id=trace_id,
+                    sections=llm_response.get("sections", [])
+                )
+                
+            except Exception as flat_err:
+                logger.error("Flat mode LLM processing failed, using fallback",
+                           error=str(flat_err),
+                           trace_id=trace_id)
+                
+                # Determine reason for degradation
+                reason = "llm_json_error" if "JSON" in str(flat_err) else "llm_processing_failed"
+                
+                # Record degradation metric
+                metrics.record_degradation(reason)
+                
+                # Use extractive fallback - convert to EnhancedDigest
+                digest_data = extractive_fallback(
+                    evidence_chunks=evidence_chunks,
+                    digest_date=digest_date,
+                    trace_id=trace_id,
+                    reason=reason
+                )
+                
+                prompt_version = "extractive_fallback"
+                is_partial = True
+                partial_reason = reason
             
             # Enrich items with email subjects and collect statistics
             evidence_to_subject = {chunk.evidence_id: chunk.message_metadata.get("subject", "") 
                                   for chunk in evidence_chunks}
             unique_msg_ids = set()
             
-            for section in digest_data.sections:
-                for item in section.items:
-                    # Add email subject
+            # Check if digest_data is Digest (v1) or EnhancedDigest (fallback)
+            if isinstance(digest_data, Digest):
+                for section in digest_data.sections:
+                    for item in section.items:
+                        # Add email subject
+                        item.email_subject = evidence_to_subject.get(item.evidence_id, "")
+                        # Track unique msg_ids for statistics
+                        if item.source_ref.get("msg_id"):
+                            unique_msg_ids.add(item.source_ref["msg_id"])
+                
+                # Add statistics
+                digest_data.total_emails_processed = len(messages)
+                digest_data.emails_with_actions = len(unique_msg_ids)
+            else:
+                # EnhancedDigest - enrich all action types
+                for action in digest_data.my_actions + digest_data.others_actions:
+                    action.email_subject = evidence_to_subject.get(action.evidence_id, "")
+                    for chunk in evidence_chunks:
+                        if chunk.evidence_id == action.evidence_id:
+                            if chunk.source_ref.get("msg_id"):
+                                unique_msg_ids.add(chunk.source_ref["msg_id"])
+                            break
+                
+                for item in digest_data.deadlines_meetings + digest_data.risks_blockers + digest_data.fyi:
                     item.email_subject = evidence_to_subject.get(item.evidence_id, "")
-                    # Track unique msg_ids for statistics
-                    if item.source_ref.get("msg_id"):
-                        unique_msg_ids.add(item.source_ref["msg_id"])
-            
-            # Add statistics
-            digest_data.total_emails_processed = len(messages)
-            digest_data.emails_with_actions = len(unique_msg_ids)
+                    for chunk in evidence_chunks:
+                        if chunk.evidence_id == item.evidence_id:
+                            if chunk.source_ref.get("msg_id"):
+                                unique_msg_ids.add(chunk.source_ref["msg_id"])
+                            break
+                
+                # Add statistics
+                digest_data.total_emails_processed = len(messages)
+                digest_data.emails_with_actions = len(unique_msg_ids)
         
         # Metrics for LLM
         if use_hierarchical:
@@ -375,24 +454,52 @@ def run_digest(from_date: str, sources: List[str], out: str, model: str, window:
         if use_hierarchical:
             # For EnhancedDigest v2, write JSON directly and use enhanced markdown
             json_path = output_dir / f"digest-{digest_date}.json"
+            digest_dict = digest_data.model_dump(exclude_none=True)
+            
+            # Add partial flag and reason if present
+            if is_partial:
+                digest_dict['partial'] = True
+                digest_dict['partial_reason'] = partial_reason
+            
             json_path.write_text(
-                digest_data.model_dump_json(indent=2, exclude_none=True),
+                json.dumps(digest_dict, indent=2, ensure_ascii=False),
                 encoding='utf-8'
             )
             
             # Write Markdown output using enhanced assembler
             markdown_assembler = MarkdownAssembler()
             md_path = output_dir / f"digest-{digest_date}.md"
-            markdown_assembler.write_enhanced_digest(digest_data, md_path)
+            markdown_assembler.write_enhanced_digest(digest_data, md_path, is_partial=is_partial, partial_reason=partial_reason)
         else:
-            # Legacy v1 output
-            json_assembler = JSONAssembler()
-            json_assembler.write_digest(digest_data, json_path)
-            
-            # Write Markdown output
-            markdown_assembler = MarkdownAssembler()
-            md_path = output_dir / f"digest-{digest_date}.md"
-            markdown_assembler.write_digest(digest_data, md_path)
+            # Check if digest_data is EnhancedDigest (fallback) or Digest (normal)
+            if isinstance(digest_data, EnhancedDigest):
+                # Fallback case - write as enhanced digest
+                json_path = output_dir / f"digest-{digest_date}.json"
+                digest_dict = digest_data.model_dump(exclude_none=True)
+                
+                # Add partial flag and reason if present
+                if is_partial:
+                    digest_dict['partial'] = True
+                    digest_dict['partial_reason'] = partial_reason
+                
+                json_path.write_text(
+                    json.dumps(digest_dict, indent=2, ensure_ascii=False),
+                    encoding='utf-8'
+                )
+                
+                # Write Markdown output using enhanced assembler
+                markdown_assembler = MarkdownAssembler()
+                md_path = output_dir / f"digest-{digest_date}.md"
+                markdown_assembler.write_enhanced_digest(digest_data, md_path, is_partial=is_partial, partial_reason=partial_reason)
+            else:
+                # Legacy v1 output
+                json_assembler = JSONAssembler()
+                json_assembler.write_digest(digest_data, json_path)
+                
+                # Write Markdown output
+                markdown_assembler = MarkdownAssembler()
+                md_path = output_dir / f"digest-{digest_date}.md"
+                markdown_assembler.write_digest(digest_data, md_path)
         
         logger.info("Output assembly completed", json_path=str(json_path), md_path=str(md_path))
         
@@ -481,7 +588,7 @@ def run_digest_dry_run(from_date: str, sources: List[str], out: str, model: str,
             except Exception:
                 pass
 
-        ingest = EWSIngest(config.ews)
+        ingest = EWSIngest(config.ews, time_config=config.time, metrics=metrics)
         messages = ingest.fetch_messages(digest_date, config.time)
         logger.info("Email ingestion completed", emails_fetched=len(messages))
         metrics.record_emails_total(len(messages), "fetched")

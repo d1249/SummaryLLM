@@ -15,7 +15,7 @@ import tenacity
 import ssl
 
 from digest_core.config import EWSConfig, TimeConfig
-from digest_core.ingest.timezone import ensure_tz_aware
+from digest_core.utils.tz import ensure_aware, to_utc
 
 logger = structlog.get_logger()
 
@@ -43,9 +43,10 @@ class EWSIngest:
     _ssl_verification_disabled = False
     _original_request = None
     
-    def __init__(self, config: EWSConfig, time_config: TimeConfig = None):
+    def __init__(self, config: EWSConfig, time_config: TimeConfig = None, metrics=None):
         self.config = config
         self.time_config = time_config or TimeConfig()
+        self.metrics = metrics
         self.account: Optional[Account] = None
         self._setup_ssl_context()
         
@@ -229,7 +230,7 @@ class EWSIngest:
         logger.info("SSL verification restored to original state for all libraries")
     
     def _get_time_window(self, digest_date: str, time_config: TimeConfig) -> tuple[datetime, datetime]:
-        """Calculate time window for email fetching."""
+        """Calculate time window for email fetching. Returns UTC datetimes."""
         user_tz = pytz.timezone(time_config.user_timezone)
         
         if time_config.window == "calendar_day":
@@ -237,10 +238,9 @@ class EWSIngest:
             start_date = datetime.strptime(digest_date, "%Y-%m-%d").replace(tzinfo=user_tz)
             end_date = start_date.replace(hour=23, minute=59, second=59)
             
-            # Convert to standard UTC (datetime.timezone.utc, not EWSTimeZone)
-            # We'll convert to EWSDateTime later when querying EWS
-            start_utc = start_date.astimezone(timezone.utc)
-            end_utc = end_date.astimezone(timezone.utc)
+            # Convert to UTC using our utilities
+            start_utc = to_utc(start_date)
+            end_utc = to_utc(end_date)
             
         else:  # rolling_24h
             # Rolling 24 hours from now (use standard UTC)
@@ -388,12 +388,13 @@ class EWSIngest:
                 tzinfo=datetime_received.tzinfo
             )
         
-        # Ensure timezone aware using mailbox_tz
-        datetime_received = ensure_tz_aware(
+        # Ensure timezone aware using mailbox_tz and convert to UTC
+        datetime_received = ensure_aware(
             datetime_received,
             self.time_config.mailbox_tz,
-            fail_on_naive=self.time_config.fail_on_naive
+            metrics=self.metrics
         )
+        datetime_received = to_utc(datetime_received)
         
         # Extract importance (Low, Normal, High)
         importance = "Normal"
@@ -450,10 +451,13 @@ class EWSIngest:
         watermark = self._load_sync_state()
         if watermark:
             try:
-                start_date = datetime.fromisoformat(watermark)
+                start_date_parsed = datetime.fromisoformat(watermark)
+                # Ensure timezone aware and convert to UTC
+                start_date = ensure_aware(start_date_parsed, self.time_config.mailbox_tz, metrics=self.metrics)
+                start_date = to_utc(start_date)
                 logger.info("Using watermark for incremental window", start=start_date.isoformat())
-            except Exception:
-                logger.warning("Invalid watermark format, doing full fetch", watermark=watermark)
+            except Exception as e:
+                logger.warning("Invalid watermark format, doing full fetch", watermark=watermark, error=str(e))
         # Fetch with retry over the computed window
         raw_messages = self._fetch_messages_with_retry(account.inbox, start_date, end_date)
         

@@ -19,6 +19,9 @@ class MetricsCollector:
         # Create custom registry
         self.registry = CollectorRegistry()
         
+        # Rate-limiting for repeated warnings (per batch)
+        self._warning_cache = set()
+        
         # Initialize metrics
         self._init_metrics()
         
@@ -120,8 +123,8 @@ class MetricsCollector:
         )
         
         # New metrics for robustness features
-        self.llm_json_errors_total = Counter(
-            'llm_json_errors_total',
+        self.llm_json_error_total = Counter(
+            'llm_json_error_total',
             'Total LLM JSON parsing errors',
             registry=self.registry
         )
@@ -132,23 +135,23 @@ class MetricsCollector:
             registry=self.registry
         )
         
-        self.masking_violations_total = Counter(
-            'masking_violations_total',
-            'Total PII masking violations detected',
-            ['direction'],  # input, output
-            registry=self.registry
-        )
-        
         self.tz_naive_total = Counter(
             'tz_naive_total',
             'Total naive datetime encounters',
             registry=self.registry
         )
         
-        self.degrade_activated_total = Counter(
-            'degrade_activated_total',
+        self.degradations_total = Counter(
+            'degradations_total',
             'Total degradation activations',
             ['reason'],  # llm_failed, json_invalid, etc.
+            registry=self.registry
+        )
+        
+        self.validation_error_total = Counter(
+            'validation_error_total',
+            'Total validation errors',
+            ['type'],  # schema, format, required_field, etc.
             registry=self.registry
         )
     
@@ -283,18 +286,13 @@ class MetricsCollector:
     
     def record_llm_json_error(self):
         """Record LLM JSON parsing error."""
-        self.llm_json_errors_total.inc()
+        self.llm_json_error_total.inc()
         logger.debug("Recorded LLM JSON error")
     
     def record_llm_repair_failure(self):
         """Record LLM JSON repair failure."""
         self.llm_repair_fail_total.inc()
         logger.debug("Recorded LLM JSON repair failure")
-    
-    def record_masking_violation(self, direction: str):
-        """Record PII masking violation."""
-        self.masking_violations_total.labels(direction=direction).inc()
-        logger.debug("Recorded masking violation", direction=direction)
     
     def record_tz_naive(self):
         """Record naive datetime encounter."""
@@ -303,8 +301,33 @@ class MetricsCollector:
     
     def record_degradation(self, reason: str):
         """Record degradation activation."""
-        self.degrade_activated_total.labels(reason=reason).inc()
+        self.degradations_total.labels(reason=reason).inc()
         logger.debug("Recorded degradation", reason=reason)
+    
+    def record_validation_error(self, error_type: str):
+        """Record validation error."""
+        self.validation_error_total.labels(type=error_type).inc()
+        logger.debug("Recorded validation error", error_type=error_type)
+    
+    def reset_warning_cache(self):
+        """Reset warning cache at the start of each batch."""
+        self._warning_cache.clear()
+        logger.debug("Reset warning cache for new batch")
+    
+    def should_warn(self, warning_key: str) -> bool:
+        """
+        Check if a warning should be shown (rate-limited to 1 per batch).
+        
+        Args:
+            warning_key: Unique identifier for the warning
+            
+        Returns:
+            True if warning should be shown, False if it should be suppressed
+        """
+        if warning_key in self._warning_cache:
+            return False
+        self._warning_cache.add(warning_key)
+        return True
     
     def get_metric_values(self) -> Dict[str, Any]:
         """Get current metric values for debugging."""

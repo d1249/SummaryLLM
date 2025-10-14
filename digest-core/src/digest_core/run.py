@@ -179,9 +179,32 @@ def run_digest(from_date: str, sources: List[str], out: str, model: str, window:
         
         # Step 3: Build conversation threads
         logger.info("Starting thread building", stage="threads")
+        original_message_count = len(normalized_messages)
         thread_builder = ThreadBuilder()
         threads = thread_builder.build_threads(normalized_messages)
-        logger.info("Thread building completed", threads_created=len(threads))
+        
+        # Record threading metrics
+        thread_stats = thread_builder.get_stats()
+        if thread_stats.get('threads_merged_by_id', 0) > 0:
+            metrics.record_thread_merged('by_id')
+        if thread_stats.get('threads_merged_by_subject', 0) > 0:
+            metrics.record_thread_merged('by_subject')
+        if thread_stats.get('threads_merged_by_semantic', 0) > 0:
+            metrics.record_thread_merged('by_semantic')
+        if thread_stats.get('subjects_normalized', 0) > 0:
+            metrics.record_subject_normalized(thread_stats['subjects_normalized'])
+        if thread_stats.get('duplicates_found', 0) > 0:
+            metrics.record_duplicate_found(thread_stats['duplicates_found'])
+        
+        # Calculate redundancy index
+        unique_message_count = sum(len(t.messages) for t in threads)
+        redundancy = thread_builder.calculate_redundancy_index(original_message_count, unique_message_count)
+        metrics.update_redundancy_index(redundancy)
+        
+        logger.info("Thread building completed",
+                   threads_created=len(threads),
+                   redundancy_reduction=f"{redundancy*100:.1f}%",
+                   **thread_stats)
         
         # Step 4: Split into evidence chunks
         logger.info("Starting evidence splitting", stage="evidence")
@@ -666,9 +689,32 @@ def run_digest_dry_run(from_date: str, sources: List[str], out: str, model: str,
         
         # Step 3: Build conversation threads
         logger.info("Starting thread building", stage="threads")
+        original_message_count = len(normalized_messages)
         thread_builder = ThreadBuilder()
         threads = thread_builder.build_threads(normalized_messages)
-        logger.info("Thread building completed", threads_created=len(threads))
+        
+        # Record threading metrics
+        thread_stats = thread_builder.get_stats()
+        if thread_stats.get('threads_merged_by_id', 0) > 0:
+            metrics.record_thread_merged('by_id')
+        if thread_stats.get('threads_merged_by_subject', 0) > 0:
+            metrics.record_thread_merged('by_subject')
+        if thread_stats.get('threads_merged_by_semantic', 0) > 0:
+            metrics.record_thread_merged('by_semantic')
+        if thread_stats.get('subjects_normalized', 0) > 0:
+            metrics.record_subject_normalized(thread_stats['subjects_normalized'])
+        if thread_stats.get('duplicates_found', 0) > 0:
+            metrics.record_duplicate_found(thread_stats['duplicates_found'])
+        
+        # Calculate redundancy index
+        unique_message_count = sum(len(t.messages) for t in threads)
+        redundancy = thread_builder.calculate_redundancy_index(original_message_count, unique_message_count)
+        metrics.update_redundancy_index(redundancy)
+        
+        logger.info("Thread building completed",
+                   threads_created=len(threads),
+                   redundancy_reduction=f"{redundancy*100:.1f}%",
+                   **thread_stats)
         
         # Step 4: Split into evidence chunks
         logger.info("Starting evidence splitting", stage="evidence")

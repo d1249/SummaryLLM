@@ -176,6 +176,32 @@ class MetricsCollector:
             buckets=[0.0, 0.3, 0.5, 0.7, 0.85, 0.95, 1.0],
             registry=self.registry
         )
+        
+        # Threading metrics
+        self.threads_merged_total = Counter(
+            'threads_merged_total',
+            'Total threads merged by method',
+            ['merge_method'],  # by_id, by_subject, by_semantic
+            registry=self.registry
+        )
+        
+        self.subject_normalized_total = Counter(
+            'subject_normalized_total',
+            'Total email subjects normalized',
+            registry=self.registry
+        )
+        
+        self.redundancy_index = Gauge(
+            'redundancy_index',
+            'Message redundancy reduction ratio (0.0-1.0)',
+            registry=self.registry
+        )
+        
+        self.duplicates_found_total = Counter(
+            'duplicates_found_total',
+            'Total duplicate messages found by checksum',
+            registry=self.registry
+        )
     
     def record_llm_latency(self, latency_ms: float):
         """Record LLM request latency."""
@@ -264,6 +290,26 @@ class MetricsCollector:
         self.actions_confidence_histogram.observe(confidence)
         logger.debug("Recorded action confidence", confidence=confidence)
     
+    def record_thread_merged(self, merge_method: str):
+        """Record thread merge by method (by_id/by_subject/by_semantic)."""
+        self.threads_merged_total.labels(merge_method=merge_method).inc()
+        logger.debug("Recorded thread merge", merge_method=merge_method)
+    
+    def record_subject_normalized(self, count: int = 1):
+        """Record subject normalization."""
+        self.subject_normalized_total.inc(count)
+        logger.debug("Recorded subject normalization", count=count)
+    
+    def update_redundancy_index(self, redundancy: float):
+        """Update redundancy index gauge."""
+        self.redundancy_index.set(redundancy)
+        logger.debug("Updated redundancy index", redundancy=redundancy)
+    
+    def record_duplicate_found(self, count: int = 1):
+        """Record duplicate message found."""
+        self.duplicates_found_total.inc(count)
+        logger.debug("Recorded duplicate found", count=count)
+    
     def update_system_metrics(self):
         """Update system metrics."""
         uptime = time.time() - self.start_time
@@ -303,7 +349,11 @@ class MetricsCollector:
                 'citation_validation_failures_total',
                 'actions_found_total',
                 'mentions_found_total',
-                'actions_confidence_histogram'
+                'actions_confidence_histogram',
+                'threads_merged_total',
+                'subject_normalized_total',
+                'redundancy_index',
+                'duplicates_found_total'
             ]
         }
     

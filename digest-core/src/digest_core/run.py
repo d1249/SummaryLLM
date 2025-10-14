@@ -20,9 +20,10 @@ from digest_core.assemble.markdown import MarkdownAssembler
 from digest_core.observability.logs import setup_logging
 from digest_core.observability.metrics import MetricsCollector
 from digest_core.observability.healthz import start_health_server
-from digest_core.llm.schemas import Digest, EnhancedDigest
+from digest_core.llm.schemas import Digest, EnhancedDigest, ExtractedActionItem
 from digest_core.hierarchical import HierarchicalProcessor
 from digest_core.evidence.citations import CitationBuilder, CitationValidator, enrich_item_with_citations
+from digest_core.evidence.actions import ActionMentionExtractor, enrich_actions_with_evidence
 
 
 logger = structlog.get_logger()
@@ -198,6 +199,39 @@ def run_digest(from_date: str, sources: List[str], out: str, model: str, window:
                    evidence_chunks=len(evidence_chunks),
                    total_emails=total_emails,
                    total_threads=total_threads)
+        
+        # Step 4.5: Extract actions and mentions (rule-based)
+        logger.info("Starting action/mention extraction", stage="actions")
+        action_extractor = ActionMentionExtractor(
+            user_aliases=config.ews.user_aliases,
+            user_timezone=config.time.user_timezone
+        )
+        
+        all_extracted_actions = []
+        for msg in normalized_messages:
+            # Extract actions from this message
+            msg_actions = action_extractor.extract_mentions_actions(
+                text=msg.text_body,
+                msg_id=msg.msg_id,
+                sender=msg.sender,
+                sender_rank=0.5  # TODO: implement sender ranking
+            )
+            
+            # Enrich with evidence_id
+            msg_actions = enrich_actions_with_evidence(msg_actions, evidence_chunks, msg.msg_id)
+            
+            # Record metrics
+            for action in msg_actions:
+                metrics.record_action_found(action.type)
+                metrics.record_action_confidence(action.confidence)
+                if action.type == "mention":
+                    metrics.record_mention_found()
+            
+            all_extracted_actions.extend(msg_actions)
+        
+        logger.info("Action/mention extraction completed",
+                   total_actions=len(all_extracted_actions),
+                   avg_confidence=sum(a.confidence for a in all_extracted_actions) / len(all_extracted_actions) if all_extracted_actions else 0)
         
         # Step 5: Select relevant context
         logger.info("Starting context selection", stage="select")
@@ -417,6 +451,40 @@ def run_digest(from_date: str, sources: List[str], out: str, model: str, window:
                     metrics.record_citation_validation_failure(failure_type)
             else:
                 logger.info("Citation validation passed", total_citations=len(all_citations))
+        
+        # Step 6.6: Enrich extracted actions with citations and add to digest
+        if use_hierarchical and all_extracted_actions:
+            logger.info("Enriching extracted actions with citations")
+            
+            # Convert ExtractedAction to ExtractedActionItem
+            evidence_to_subject = {chunk.evidence_id: chunk.message_metadata.get("subject", "") 
+                                  for chunk in evidence_chunks}
+            
+            for action in all_extracted_actions:
+                # Create ExtractedActionItem
+                extracted_item = ExtractedActionItem(
+                    type=action.type,
+                    who=action.who,
+                    verb=action.verb,
+                    text=action.text,
+                    due=action.due,
+                    confidence=action.confidence,
+                    evidence_id=action.evidence_id,
+                    email_subject=evidence_to_subject.get(action.evidence_id, "")
+                )
+                
+                # Enrich with citations
+                enrich_item_with_citations(extracted_item, evidence_chunks, citation_builder)
+                metrics.record_citations_per_item(len(extracted_item.citations))
+                
+                # Add to digest
+                digest_data.extracted_actions.append(extracted_item)
+            
+            # Sort by confidence (highest first)
+            digest_data.extracted_actions.sort(key=lambda a: a.confidence, reverse=True)
+            
+            logger.info("Extracted actions enriched and added to digest",
+                       total_extracted_actions=len(digest_data.extracted_actions))
         
         # Step 7: Assemble outputs
         logger.info("Starting output assembly", stage="assemble")

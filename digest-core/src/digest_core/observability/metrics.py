@@ -155,6 +155,27 @@ class MetricsCollector:
             ['failure_type'],  # offset_invalid, checksum_mismatch, not_found, etc.
             registry=self.registry
         )
+        
+        # Action/mention extraction metrics
+        self.actions_found_total = Counter(
+            'actions_found_total',
+            'Total actions found by type',
+            ['action_type'],  # action, question, mention
+            registry=self.registry
+        )
+        
+        self.mentions_found_total = Counter(
+            'mentions_found_total',
+            'Total user mentions found',
+            registry=self.registry
+        )
+        
+        self.actions_confidence_histogram = Histogram(
+            'actions_confidence_histogram',
+            'Confidence score distribution for extracted actions',
+            buckets=[0.0, 0.3, 0.5, 0.7, 0.85, 0.95, 1.0],
+            registry=self.registry
+        )
     
     def record_llm_latency(self, latency_ms: float):
         """Record LLM request latency."""
@@ -228,6 +249,21 @@ class MetricsCollector:
         self.citation_validation_failures_total.labels(failure_type=failure_type).inc()
         logger.debug("Recorded citation validation failure", failure_type=failure_type)
     
+    def record_action_found(self, action_type: str):
+        """Record action found by type (action/question/mention)."""
+        self.actions_found_total.labels(action_type=action_type).inc()
+        logger.debug("Recorded action found", action_type=action_type)
+    
+    def record_mention_found(self):
+        """Record user mention found."""
+        self.mentions_found_total.inc()
+        logger.debug("Recorded mention found")
+    
+    def record_action_confidence(self, confidence: float):
+        """Record action confidence score."""
+        self.actions_confidence_histogram.observe(confidence)
+        logger.debug("Recorded action confidence", confidence=confidence)
+    
     def update_system_metrics(self):
         """Update system metrics."""
         uptime = time.time() - self.start_time
@@ -264,7 +300,10 @@ class MetricsCollector:
                 'email_cleaner_removed_blocks_total',
                 'cleaner_errors_total',
                 'citations_per_item_histogram',
-                'citation_validation_failures_total'
+                'citation_validation_failures_total',
+                'actions_found_total',
+                'mentions_found_total',
+                'actions_confidence_histogram'
             ]
         }
     

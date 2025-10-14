@@ -96,6 +96,19 @@ class FYIItem(BaseModel):
     citations: List[Citation] = Field(default_factory=list, description="Evidence citations with validated offsets")
 
 
+class ExtractedActionItem(BaseModel):
+    """Rule-based extracted action or mention (not from LLM)."""
+    type: str = Field(description="action, question, or mention")
+    who: str = Field(description="Who should act (usually 'user')")
+    verb: str = Field(description="Action verb or question type")
+    text: str = Field(max_length=500, description="Full text of action/mention")
+    due: Optional[str] = Field(None, description="Deadline if found")
+    confidence: float = Field(ge=0.0, le=1.0, description="Confidence score (0.0-1.0)")
+    evidence_id: str = Field(description="Evidence ID reference")
+    citations: List[Citation] = Field(default_factory=list, description="Evidence citations with validated offsets")
+    email_subject: Optional[str] = Field(default=None)
+
+
 class EnhancedDigest(BaseModel):
     """Enhanced digest with structured sections and evidence references."""
     schema_version: str = "2.0"
@@ -110,6 +123,9 @@ class EnhancedDigest(BaseModel):
     deadlines_meetings: List[DeadlineMeeting] = Field(default_factory=list)
     risks_blockers: List[RiskBlocker] = Field(default_factory=list)
     fyi: List[FYIItem] = Field(default_factory=list)
+    
+    # Rule-based extracted actions/mentions (separate from LLM-generated)
+    extracted_actions: List[ExtractedActionItem] = Field(default_factory=list, description="Rule-based extracted actions and mentions")
 
     # Markdown summary (generated after JSON)
     markdown_summary: Optional[str] = None

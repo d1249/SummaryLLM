@@ -19,6 +19,99 @@ except ImportError:
     def repair_json(text: str) -> str:
         return text
 
+def extract_json_from_text(text: str) -> str:
+    """
+    Extract JSON from text using regex patterns as last resort.
+
+    Args:
+        text: Text that may contain JSON
+
+    Returns:
+        Extracted JSON string or original text
+    """
+    import re
+
+    # Try to find JSON object/array
+    patterns = [
+        r'\{.*\}',  # Object
+        r'\[.*\]',  # Array
+    ]
+
+    for pattern in patterns:
+        matches = re.findall(pattern, text, re.DOTALL)
+        for match in matches:
+            # Try to parse this match as JSON
+            try:
+                json.loads(match)
+                return match
+            except:
+                continue
+
+    return text
+
+def advanced_json_repair(text: str) -> str:
+    """
+    Advanced JSON repair that handles common LLM JSON issues.
+
+    Args:
+        text: Raw text that should contain JSON
+
+    Returns:
+        Repaired JSON string
+    """
+    import re
+
+    # 1. Remove markdown code blocks if present
+    text = re.sub(r'```\s*json\s*', '', text)
+    text = re.sub(r'```\s*$', '', text)
+
+    # 2. Fix unterminated strings (common issue)
+    # Find strings that start but don't end properly
+    lines = text.split('\n')
+    fixed_lines = []
+    in_string = False
+    string_char = None
+
+    for line in lines:
+        if not in_string:
+            # Look for start of string
+            string_match = re.search(r'(["\'])(.*)$', line)
+            if string_match:
+                string_char = string_match.group(1)
+                content = string_match.group(2)
+                # Check if string ends on this line
+                if content.count(string_char) % 2 == 1:  # Odd number means unterminated
+                    line = line + string_char  # Close the string
+                    in_string = False
+                else:
+                    in_string = True
+            fixed_lines.append(line)
+        else:
+            # We're in a string, look for its end
+            if string_char in line:
+                in_string = False
+            fixed_lines.append(line)
+
+    text = '\n'.join(fixed_lines)
+
+    # 3. Fix missing commas between objects in arrays
+    # Pattern: } { -> },
+    text = re.sub(r'}\s*{', '}, {', text)
+
+    # 4. Fix trailing commas before closing brackets/braces
+    text = re.sub(r',(\s*[}\]])', r'\1', text)
+
+    # 5. Fix missing closing braces/brackets at end
+    open_braces = text.count('{') - text.count('}')
+    open_brackets = text.count('[') - text.count(']')
+
+    if open_braces > 0:
+        text += '}' * open_braces
+    if open_brackets > 0:
+        text += ']' * open_brackets
+
+    return text
+
 try:
     from jsonschema import validate, ValidationError
 except ImportError:
@@ -235,16 +328,54 @@ Signals: action_verbs=[{action_verbs_str}]; dates=[{dates_str}]; contains_questi
                         error=str(e),
                         content_preview=content[:500] if len(content) > 500 else content
                     )
-                    # Try to repair JSON using json-repair
+                    # Try to repair JSON using advanced repair
                     try:
-                        repaired_json = repair_json(content_stripped)
-                        parsed_content = json.loads(repaired_json)
-                        logger.info("JSON successfully repaired", original_error=str(e))
-                    except Exception as repair_error:
+                        # First try with advanced repair
+                        advanced_repaired = advanced_json_repair(content_stripped)
+                        parsed_content = json.loads(advanced_repaired)
+                        logger.info("JSON successfully repaired with advanced repair", original_error=str(e))
+                    except Exception as advanced_error:
                         logger.warning(
-                            "JSON repair failed, retrying",
-                            repair_error=str(repair_error)
+                            "Advanced JSON repair failed, trying json-repair library",
+                            advanced_error=str(advanced_error)
                         )
+                try:
+                    # Fallback to json-repair library
+                    repaired_json = repair_json(content_stripped)
+                    parsed_content = json.loads(repaired_json)
+                    logger.info("JSON successfully repaired with json-repair library", original_error=str(e))
+                except Exception as library_error:
+                    logger.warning(
+                        "JSON repair failed, trying regex extraction",
+                        library_error=str(library_error)
+                    )
+                    try:
+                        # Last resort: extract JSON with regex
+                        extracted_json = extract_json_from_text(content_stripped)
+                        if extracted_json != content_stripped:
+                            parsed_content = json.loads(extracted_json)
+                            logger.info("JSON successfully extracted with regex", original_error=str(e))
+                        else:
+                            raise ValueError("No valid JSON found")
+                    except Exception as extract_error:
+                        logger.error(
+                            "All JSON repair methods failed, creating fallback digest",
+                            extract_error=str(extract_error),
+                            content_preview=content[:300] if len(content) > 300 else content
+                        )
+                        # Last resort: create empty digest instead of failing completely
+                        parsed_content = {
+                            "schema_version": "2.0",
+                            "prompt_version": "v2",
+                            "digest_date": digest_date,
+                            "trace_id": trace_id,
+                            "timezone": "America/Sao_Paulo",
+                            "my_actions": [],
+                            "others_actions": [],
+                            "deadlines_meetings": [],
+                            "risks_blockers": [],
+                            "fyi": []
+                        }
                 # Add retry instruction to system message
                 if "IMPORTANT: Return ONLY valid JSON" not in messages[0]["content"]:
                     messages[0]["content"] = messages[0]["content"] + "\n\nIMPORTANT: Return ONLY valid JSON per schema. No markdown, no code blocks, no additional text."
@@ -462,7 +593,25 @@ Signals: action_verbs=[{action_verbs_str}]; dates=[{dates_str}]; contains_questi
 Правила:
 - Максимум 600 символов для summary
 - Максимум 300 символов для quote
-- Обрезай по границе предложения если нужно"""
+- Обрезай по границе предложения если нужно
+
+ПРИМЕР ПРАВИЛЬНОГО ВЫВОДА:
+{
+  "thread_id": "test",
+  "summary": "Короткое описание треда",
+  "pending_actions": [
+    {
+      "title": "Проверить отчет",
+      "evidence_id": "ev_123",
+      "quote": "Пожалуйста, проверьте отчет Q4.",
+      "who_must_act": "user"
+    }
+  ],
+  "deadlines": [],
+  "who_must_act": ["user"],
+  "open_questions": [],
+  "evidence_ids": ["ev_123"]
+}"""
 
         return simplified
 
@@ -612,12 +761,49 @@ Signals: action_verbs=[{action_verbs_str}]; dates=[{dates_str}]; contains_questi
         except json.JSONDecodeError as e:
             logger.warning("Invalid JSON in response, attempting repair", error=str(e), json_preview=json_str[:500])
             try:
-                repaired_json = repair_json(json_str)
-                parsed = json.loads(repaired_json)
-                logger.info("JSON successfully repaired", original_error=str(e))
-            except Exception as repair_error:
-                logger.error("JSON repair failed", repair_error=str(repair_error), json_preview=json_str[:500])
-                raise ValueError(f"Invalid JSON in response: {e}")
+                # First try with advanced repair
+                advanced_repaired = advanced_json_repair(json_str)
+                parsed = json.loads(advanced_repaired)
+                logger.info("JSON successfully repaired with advanced repair", original_error=str(e))
+            except Exception as advanced_error:
+                logger.warning(
+                    "Advanced JSON repair failed, trying json-repair library",
+                    advanced_error=str(advanced_error)
+                )
+                try:
+                    # Fallback to json-repair library
+                    repaired_json = repair_json(json_str)
+                    parsed = json.loads(repaired_json)
+                    logger.info("JSON successfully repaired with json-repair library", original_error=str(e))
+                except Exception as library_error:
+                    logger.warning(
+                        "JSON repair failed, trying regex extraction",
+                        library_error=str(library_error)
+                    )
+                    try:
+                        # Last resort: extract JSON with regex
+                        extracted_json = extract_json_from_text(json_str)
+                        if extracted_json != json_str:
+                            parsed = json.loads(extracted_json)
+                            logger.info("JSON successfully extracted with regex", original_error=str(e))
+                        else:
+                            raise ValueError("No valid JSON found")
+                    except Exception as extract_error:
+                        logger.error(
+                            "All JSON repair methods failed for thread summary, creating fallback",
+                            extract_error=str(extract_error),
+                            json_preview=json_str[:300] if len(json_str) > 300 else json_str
+                        )
+                        # Last resort: create empty thread summary instead of failing completely
+                        parsed = {
+                            "thread_id": thread_id,
+                            "summary": "Thread summary extraction failed",
+                            "pending_actions": [],
+                            "deadlines": [],
+                            "who_must_act": [],
+                            "open_questions": [],
+                            "evidence_ids": [c.evidence_id for c in chunks[:3]]  # Use first 3 evidence IDs
+                        }
         
         # Add markdown if present
         if markdown_lines:

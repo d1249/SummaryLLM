@@ -114,6 +114,27 @@ email_cleaner:
     - 'Политика конфиденциальности'
   track_removed_spans: true # Track removed text spans for offset mapping
 
+nlp:
+  # Custom action verbs for domain-specific extraction
+  # Format: verb_form: lemma
+  custom_action_verbs:
+    # EN domain-specific verbs
+    deploy: deploy
+    deployed: deploy
+    deploying: deploy
+    deploys: deploy
+    merge: merge
+    merged: merge
+    merging: merge
+    merges: merge
+    # RU domain-specific verbs
+    задеплоить: задеплоить
+    задеплой: задеплоить
+    задеплойте: задеплоить
+    замержить: замержить
+    замержь: замержить
+    замержьте: замержить
+
 ranker:
   enabled: true              # Enable ranking of digest items
   # Feature weights (will be normalized to sum to 1.0)

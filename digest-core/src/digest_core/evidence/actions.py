@@ -12,13 +12,19 @@ Uses confidence scoring based on:
 - Question markers
 - Deadline/date presence
 - Sender importance
+
+Enhancements:
+- Lightweight lemmatization for RU/EN verbs (no heavy dependencies)
+- Matches verbs by both exact form and lemma
 """
 import re
 import math
 import structlog
-from typing import List, Dict, Optional, Tuple
+from typing import List, Dict, Optional, Tuple, Set
 from dataclasses import dataclass
 from datetime import datetime
+
+from digest_core.evidence.lemmatizer import LightweightLemmatizer
 
 logger = structlog.get_logger()
 
@@ -106,19 +112,53 @@ class ActionMentionExtractor:
         r'\b(eod|end of day|конец дня)\b',
     ]
     
-    def __init__(self, user_aliases: List[str], user_timezone: str = "UTC"):
+    def __init__(
+        self, 
+        user_aliases: List[str], 
+        user_timezone: str = "UTC",
+        custom_verbs: Dict[str, str] = None
+    ):
         """
         Initialize ActionMentionExtractor.
         
         Args:
             user_aliases: List of user email addresses and names to detect mentions
             user_timezone: User timezone for date parsing
+            custom_verbs: Optional custom verb lemma dictionary for domain-specific actions
         """
         self.user_aliases = [alias.lower() for alias in user_aliases]
         self.user_timezone = user_timezone
         
+        # Initialize lemmatizer with custom verbs
+        self.lemmatizer = LightweightLemmatizer(custom_verbs=custom_verbs)
+        
+        # Build action verb lemma sets for quick lookup
+        self._build_action_verb_lemmas()
+        
         # Compile regex patterns for performance
         self._compile_patterns()
+    
+    def _build_action_verb_lemmas(self):
+        """Build sets of action verb lemmas for quick matching."""
+        # EN action verbs (base forms)
+        self.en_action_verbs = {
+            'ask', 'provide', 'check', 'update', 'confirm', 'send', 'review', 'approve',
+            'complete', 'finish', 'deliver', 'submit', 'prepare', 'create', 'schedule',
+            'arrange', 'coordinate', 'organize', 'verify', 'validate', 'investigate',
+            'resolve', 'fix', 'implement', 'discuss', 'meet', 'call', 'contact',
+            'inform', 'notify', 'remind', 'follow', 'escalate', 'prioritize', 'decide',
+        }
+        
+        # RU action verbs (infinitives)
+        self.ru_action_verbs = {
+            'сделать', 'проверить', 'прислать', 'подтвердить', 'уточнить', 'договориться',
+            'перенести', 'собрать', 'подготовить', 'отправить', 'согласовать', 'обсудить',
+            'решить', 'организовать', 'ответить', 'предоставить', 'дать', 'взять',
+            'написать', 'позвонить', 'встретиться', 'выполнить', 'утвердить', 'одобрить',
+            'посмотреть', 'изучить', 'рассмотреть', 'оценить', 'сообщить', 'уведомить',
+            'передать', 'исправить', 'поправить', 'обновить', 'изменить', 'завершить',
+            'закончить', 'доделать', 'финализировать',
+        }
     
     def _compile_patterns(self):
         """Compile all regex patterns."""
@@ -254,21 +294,76 @@ class ActionMentionExtractor:
         return False
     
     def _find_imperative(self, text: str) -> Optional[str]:
-        """Find imperative verb in text."""
-        # Check Russian imperatives
+        """
+        Find imperative verb in text.
+        
+        Strategy:
+        1. First check regex patterns (exact match)
+        2. If not found, tokenize and check lemmas
+        """
+        # Strategy 1: Check regex patterns (exact match)
         match = self.ru_imperative_pattern.search(text)
         if match:
             return match.group(0)
         
-        # Check English imperatives
         match = self.en_imperative_pattern.search(text)
         if match:
             return match.group(0)
         
+        # Strategy 2: Check by lemma (for different verb forms)
+        verb_found = self._find_verb_by_lemma(text)
+        if verb_found:
+            return verb_found
+        
+        return None
+    
+    def _find_verb_by_lemma(self, text: str) -> Optional[str]:
+        """
+        Find action verb by lemmatizing tokens.
+        
+        Args:
+            text: Sentence text
+        
+        Returns:
+            Found verb or None
+        """
+        # Skip if past tense passive context (not an action request)
+        past_tense_indicators = [
+            r'\b(был|была|было|были)\b',  # RU: был/была/было/были
+            r'\b(was|were|has been|have been)\b',  # EN: was/were/has been/have been
+            r'\b\w+(ли|ла|ло)\s+(вчера|утром|сегодня|уже)\b',  # RU: прислали утром, сделали вчера
+            r'\b\w+ed\s+(yesterday|today|already)\b',  # EN: checked yesterday
+        ]
+        for pattern in past_tense_indicators:
+            if re.search(pattern, text.lower()):
+                # Skip: past tense passive, not action
+                return None
+        
+        # Tokenize (simple split)
+        tokens = re.findall(r'\b\w+\b', text.lower())
+        
+        for token in tokens:
+            # Lemmatize token
+            lemma = self.lemmatizer.lemmatize_token(token, lang='auto')
+            
+            # Check if lemma is a known action verb
+            if lemma in self.en_action_verbs or lemma in self.ru_action_verbs:
+                logger.debug("Found action verb by lemma",
+                            token=token,
+                            lemma=lemma,
+                            text_snippet=text[:50])
+                return lemma
+        
         return None
     
     def _find_action_marker(self, text: str) -> Optional[str]:
-        """Find action marker in text."""
+        """
+        Find action marker in text.
+        
+        Strategy:
+        1. Check regex patterns for explicit markers (нужно, need to, etc.)
+        2. Check for action verbs by lemma
+        """
         # Check Russian action markers
         match = self.ru_action_pattern.search(text)
         if match:
@@ -278,6 +373,11 @@ class ActionMentionExtractor:
         match = self.en_action_pattern.search(text)
         if match:
             return match.group(0)
+        
+        # Check for action verbs by lemma (fallback)
+        verb_found = self._find_verb_by_lemma(text)
+        if verb_found:
+            return verb_found
         
         return None
     

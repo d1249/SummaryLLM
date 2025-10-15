@@ -218,6 +218,47 @@ class HierarchicalConfig(BaseModel):
     max_cost_increase_per_email_pct: int = Field(default=40, description="Max acceptable cost increase per email %")
 
 
+class NLPConfig(BaseModel):
+    """Configuration for NLP features (lemmatization, action extraction)."""
+    # Custom action verbs: form → lemma mapping for domain-specific actions
+    custom_action_verbs: Dict[str, str] = Field(
+        default_factory=lambda: {
+            # EN domain-specific examples
+            'deploy': 'deploy', 'deployed': 'deploy', 'deploying': 'deploy',
+            'merge': 'merge', 'merged': 'merge', 'merging': 'merge',
+            
+            # RU domain-specific examples
+            'задеплоить': 'задеплоить', 'задеплой': 'задеплоить',
+            'замержить': 'замержить', 'замержь': 'замержить',
+        },
+        description="Custom verb forms for domain-specific action extraction"
+    )
+
+
+class RankerConfig(BaseModel):
+    """Configuration for digest item ranking."""
+    enabled: bool = Field(default=True, description="Enable ranking of digest items")
+    
+    # Feature weights (will be normalized to sum to 1.0)
+    weight_user_in_to: float = Field(default=0.15, ge=0.0, le=1.0, description="Weight for user as direct recipient (To)")
+    weight_user_in_cc: float = Field(default=0.05, ge=0.0, le=1.0, description="Weight for user as CC recipient")
+    weight_has_action: float = Field(default=0.20, ge=0.0, le=1.0, description="Weight for item containing action markers")
+    weight_has_mention: float = Field(default=0.10, ge=0.0, le=1.0, description="Weight for item mentioning user")
+    weight_has_due_date: float = Field(default=0.15, ge=0.0, le=1.0, description="Weight for item having a deadline")
+    weight_sender_importance: float = Field(default=0.10, ge=0.0, le=1.0, description="Weight for sender being important")
+    weight_thread_length: float = Field(default=0.05, ge=0.0, le=1.0, description="Weight for long conversation thread")
+    weight_recency: float = Field(default=0.10, ge=0.0, le=1.0, description="Weight for recent message")
+    weight_has_attachments: float = Field(default=0.05, ge=0.0, le=1.0, description="Weight for message having attachments")
+    weight_has_project_tag: float = Field(default=0.05, ge=0.0, le=1.0, description="Weight for message having a project tag (e.g., JIRA)")
+    
+    important_senders: List[str] = Field(
+        default_factory=list,
+        description="List of important sender email addresses or domain patterns (e.g., 'ceo@', 'example.com')"
+    )
+    
+    log_positions: bool = Field(default=True, description="Log item positions for A/B analysis")
+
+
 class Config(BaseSettings):
     """Main configuration class."""
     
@@ -233,6 +274,7 @@ class Config(BaseSettings):
     shrink: ShrinkConfig = Field(default_factory=ShrinkConfig)
     hierarchical: HierarchicalConfig = Field(default_factory=HierarchicalConfig)
     email_cleaner: EmailCleanerConfig = Field(default_factory=EmailCleanerConfig)
+    nlp: NLPConfig = Field(default_factory=NLPConfig)
     ranker: RankerConfig = Field(default_factory=RankerConfig)
     
     class Config:
@@ -335,6 +377,8 @@ class Config(BaseSettings):
             self.hierarchical = HierarchicalConfig(**yaml_config['hierarchical'])
         if 'email_cleaner' in yaml_config:
             self.email_cleaner = EmailCleanerConfig(**yaml_config['email_cleaner'])
+        if 'nlp' in yaml_config:
+            self.nlp = NLPConfig(**yaml_config['nlp'])
         if 'ranker' in yaml_config:
             self.ranker = RankerConfig(**yaml_config['ranker'])
     

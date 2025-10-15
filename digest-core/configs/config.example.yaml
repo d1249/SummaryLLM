@@ -1,6 +1,9 @@
 time:
   user_timezone: "Europe/Moscow"
   window: "calendar_day"
+  mailbox_tz: "Europe/Moscow"      # Mailbox timezone for normalizing naive datetime
+  runner_tz: "Europe/Moscow"   # Runner/job timezone
+  fail_on_naive: true              # Fail if naive datetime is encountered
 
 ews:
   endpoint: "https://owa.corp-domain.ru/EWS/Exchange.asmx"
@@ -14,7 +17,7 @@ ews:
   lookback_hours: 24
   page_size: 100
   sync_state_path: ".state/ews.syncstate"
-  user_aliases: ["alias1@corp-domain.ru", "alias2@corp-domain.ru"]
+  user_aliases: ["Name", "Surname", "Name.Surname@corp-domain.ru", "login"]
 
 llm:
   endpoint: "https://llm-gw.corp.com/api/v1/chat"
@@ -24,6 +27,8 @@ llm:
     Authorization: "Bearer ${LLM_TOKEN}"
   max_tokens_per_run: 30000
   cost_limit_per_run: 5.0
+  strict_json: true          # Enforce strict JSON validation with Pydantic
+  max_retries: 3             # Maximum retry attempts for invalid JSON
 
 observability:
   prometheus_port: 9108
@@ -69,9 +74,12 @@ shrink:
 hierarchical:
   enable: true              # Enable hierarchical mode
   auto_enable: true         # Auto-enable based on thresholds
+  enable_auto: true         # Enable automatic hierarchical mode activation
+  threshold_threads: 40     # Thread count threshold for auto activation (умеренный порог)
+  threshold_emails: 200     # Email count threshold for auto activation
+  min_threads_to_summarize: 6  # Minimum threads required to use hierarchical mode
   min_threads: 60           # Min threads to auto-activate (was 30)
   min_emails: 300           # Min emails to auto-activate (was 150)
-  
   per_thread_max_chunks_in: 8  # Max chunks per thread for summarization
   per_thread_max_chunks_exception: 12  # Max chunks in exceptional cases (mentions, last update)
   summary_max_tokens: 90    # Max tokens for thread summary
@@ -155,3 +163,7 @@ ranker:
     - 'manager@'
   
   log_positions: true        # Log item positions for A/B analysis
+
+degrade:
+  enable: true              # Enable degradation on LLM failures
+  mode: "extractive"        # Degradation mode: extractive | empty

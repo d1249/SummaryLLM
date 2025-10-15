@@ -1,7 +1,7 @@
 """
 Evidence splitting for LLM processing.
 """
-import re
+import re as _stdre
 import uuid
 from typing import List, NamedTuple, Dict, Any
 import structlog
@@ -9,6 +9,34 @@ import structlog
 from digest_core.threads.build import ConversationThread
 from digest_core.evidence import signals
 from digest_core.config import ContextBudgetConfig, ChunkingConfig
+
+# Safe Cyrillic pattern for structural break detection
+try:
+    import regex
+    _HAS_REGEX = True
+except ImportError:
+    regex = None
+    _HAS_REGEX = False
+
+def _get_caps_cyrillic_pattern():
+    """Get safe pattern for CAPS headers with Cyrillic."""
+    if _HAS_REGEX:
+        # Use Unicode property for safety
+        try:
+            return regex.compile(
+                r'^[\p{Lu}\p{Cyrillic}][\p{Lu}\p{Cyrillic}\s]{3,}:\s*$',
+                regex.UNICODE
+            )
+        except Exception:
+            pass
+    # Fallback to explicit Unicode ranges
+    # U+0410-U+042F = Cyrillic uppercase, U+0400-U+04FF = full Cyrillic block
+    return _stdre.compile(
+        r'^[A-Z\u0400-\u04FF][A-Z\u0400-\u04FF\s]{3,}:\s*$',
+        _stdre.UNICODE
+    )
+
+CAPS_HEADER_PATTERN = _get_caps_cyrillic_pattern()
 
 logger = structlog.get_logger()
 
@@ -95,19 +123,19 @@ class EvidenceSplitter:
         
         for i, line in enumerate(lines):
             # Markdown headers
-            if re.match(r'^#{1,3}\s+', line):
+            if _stdre.match(r'^#{1,3}\s+', line):
                 break_points.append(i)
-            # CAPS + colon (ЗАГОЛОВОК: / HEADER:)
-            elif re.match(r'^[A-ZА-Я][A-ZА-Я\s]{3,}:\s*$', line):
+            # CAPS + colon (ЗАГОЛОВОК: / HEADER:) - use safe pattern
+            elif CAPS_HEADER_PATTERN.match(line):
                 break_points.append(i)
             # Numbered lists
-            elif re.match(r'^\s*\d+[\.)]\s+', line):
+            elif _stdre.match(r'^\s*\d+[\.)]\s+', line):
                 break_points.append(i)
             # Email markers (On ... wrote:, От:, From:)
-            elif re.match(r'^(On .+ wrote:|От:|From:|Subject:)', line, re.IGNORECASE):
+            elif _stdre.match(r'^(On .+ wrote:|От:|From:|Subject:)', line, _stdre.IGNORECASE):
                 break_points.append(i)
             # Horizontal rules
-            elif re.match(r'^[\-\*=]{3,}\s*$', line):
+            elif _stdre.match(r'^[\-\*=]{3,}\s*$', line):
                 break_points.append(i)
         
         return break_points
@@ -191,10 +219,9 @@ class EvidenceSplitter:
     
     def _split_by_sentences(self, text: str, conversation_id: str, message, message_index: int, start_chunk_count: int) -> List[EvidenceChunk]:
         """Split long text by sentences."""
-        import re
         
         # Simple sentence splitting
-        sentences = re.split(r'[.!?]+', text)
+        sentences = _stdre.split(r'[.!?]+', text)
         sentences = [s.strip() for s in sentences if s.strip()]
         
         chunks = []
@@ -322,7 +349,6 @@ class EvidenceSplitter:
                 score += 1.0
         
         # Date/time references
-        import re
         date_patterns = [
             r'\b\d{1,2}[./]\d{1,2}[./]\d{2,4}\b',  # DD/MM/YYYY
             r'\b\d{4}-\d{2}-\d{2}\b',  # YYYY-MM-DD
@@ -330,7 +356,7 @@ class EvidenceSplitter:
         ]
         
         for pattern in date_patterns:
-            if re.search(pattern, content_lower):
+            if _stdre.search(pattern, content_lower):
                 score += 0.5
         
         # Question marks indicate requests

@@ -45,9 +45,7 @@ class TestActionDetectionRussian:
         assert actions[0].type in ["action", "mention"]
         assert actions[0].confidence > 0.5
     
-    def test_russian_action_marker_nuzhn
-
-o(self, extractor):
+    def test_russian_action_marker_nuzhno(self, extractor):
         """Test Russian 'нужно' action marker."""
         text = "Иван Петров, нужно согласовать документ до завтра."
         actions = extractor.extract_mentions_actions(text, "msg-002", "colleague@corp.com")

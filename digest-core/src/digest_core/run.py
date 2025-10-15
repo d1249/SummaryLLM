@@ -240,10 +240,17 @@ def run_digest(from_date: str, sources: List[str], out: str, model: str, window:
         all_extracted_actions = []
         for msg in normalized_messages:
             # Extract actions from this message
+            # Get sender with None-safety
+            sender = msg.sender or msg.from_email or msg.sender_email or ""
+            
+            # Record metric if sender is missing
+            if not sender:
+                metrics.record_action_sender_missing()
+            
             msg_actions = action_extractor.extract_mentions_actions(
                 text=msg.text_body,
                 msg_id=msg.msg_id,
-                sender=msg.sender,
+                sender=sender,
                 sender_rank=0.5  # TODO: implement sender ranking
             )
             

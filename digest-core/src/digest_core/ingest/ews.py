@@ -21,7 +21,7 @@ logger = structlog.get_logger()
 
 
 class NormalizedMessage(NamedTuple):
-    """Normalized email message."""
+    """Normalized email message with canonical email metadata fields."""
     msg_id: str
     conversation_id: str
     datetime_received: datetime
@@ -34,6 +34,20 @@ class NormalizedMessage(NamedTuple):
     is_flagged: bool
     has_attachments: bool
     attachment_types: List[str]  # ["pdf", "xlsx", ...]
+    
+    # Canonical email metadata fields for forward/backward compatibility
+    from_email: str
+    from_name: Optional[str]
+    to_emails: List[str]
+    cc_emails: List[str]
+    message_id: str
+    body_norm: str
+    received_at: datetime
+    
+    @property
+    def sender(self) -> str:
+        """Backward compatibility alias for sender_email."""
+        return self.from_email or self.sender_email or ""
 
 
 class EWSIngest:
@@ -422,6 +436,11 @@ class EWSIngest:
                             if ext and ext not in attachment_types:
                                 attachment_types.append(ext)
         
+        # Extract sender name if available
+        from_name = None
+        if msg.sender and hasattr(msg.sender, 'name') and msg.sender.name:
+            from_name = str(msg.sender.name)
+        
         return NormalizedMessage(
             msg_id=msg_id,
             conversation_id=conversation_id,
@@ -434,7 +453,15 @@ class EWSIngest:
             importance=importance,
             is_flagged=is_flagged,
             has_attachments=has_attachments,
-            attachment_types=attachment_types
+            attachment_types=attachment_types,
+            # Canonical fields for forward/backward compatibility
+            from_email=sender_email,
+            from_name=from_name,
+            to_emails=to_recipients,
+            cc_emails=cc_recipients,
+            message_id=msg_id,
+            body_norm=text_body,
+            received_at=datetime_received
         )
     
     def fetch_messages(self, digest_date: str, time_config: TimeConfig) -> List[NormalizedMessage]:

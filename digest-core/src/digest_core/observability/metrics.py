@@ -180,6 +180,12 @@ class MetricsCollector:
             registry=self.registry
         )
         
+        self.actions_sender_missing_total = Counter(
+            'actions_sender_missing_total',
+            'Total number of actions extracted with missing sender',
+            registry=self.registry
+        )
+        
         # Threading metrics
         self.threads_merged_total = Counter(
             'threads_merged_total',
@@ -389,6 +395,11 @@ class MetricsCollector:
         self.actions_confidence_histogram.observe(confidence)
         logger.debug("Recorded action confidence", confidence=confidence)
     
+    def record_action_sender_missing(self):
+        """Record action extracted with missing sender."""
+        self.actions_sender_missing_total.inc()
+        logger.debug("Recorded action sender missing")
+    
     def record_thread_merged(self, merge_method: str):
         """Record thread merge by method (by_id/by_subject/by_semantic)."""
         self.threads_merged_total.labels(merge_method=merge_method).inc()
@@ -494,6 +505,7 @@ class MetricsCollector:
                 'actions_found_total',
                 'mentions_found_total',
                 'actions_confidence_histogram',
+                'actions_sender_missing_total',
                 'threads_merged_total',
                 'subject_normalized_total',
                 'redundancy_index',

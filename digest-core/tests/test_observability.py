@@ -76,9 +76,9 @@ def test_metrics_endpoint():
 def test_metrics_cardinality_limits(metrics_collector):
     """Test that metrics don't have high cardinality."""
     # Record some metrics with different labels
-    metrics_collector.record_llm_latency(100, "gpt-4o-mini", "extract_actions")
-    metrics_collector.record_llm_latency(200, "gpt-4o-mini", "extract_actions")
-    metrics_collector.record_llm_latency(150, "gpt-4o-mini", "summarize")
+    metrics_collector.record_llm_latency(100, "Qwen/Qwen3-30B-A3B-Instruct-2507", "extract_actions")
+    metrics_collector.record_llm_latency(200, "Qwen/Qwen3-30B-A3B-Instruct-2507", "extract_actions")
+    metrics_collector.record_llm_latency(150, "Qwen/Qwen3-30B-A3B-Instruct-2507", "summarize")
     
     # Check that metrics are properly aggregated
     # This is more of a design test - we ensure we don't create high-cardinality labels
@@ -88,8 +88,8 @@ def test_metrics_cardinality_limits(metrics_collector):
 def test_metrics_collection(metrics_collector):
     """Test basic metrics collection."""
     # Record various metrics
-    metrics_collector.record_llm_latency(100, "gpt-4o-mini", "extract_actions")
-    metrics_collector.record_llm_tokens(100, 50, "gpt-4o-mini")
+    metrics_collector.record_llm_latency(100, "Qwen/Qwen3-30B-A3B-Instruct-2507", "extract_actions")
+    metrics_collector.record_llm_tokens(100, 50, "Qwen/Qwen3-30B-A3B-Instruct-2507")
     metrics_collector.record_digest_build_time(30.5)
     metrics_collector.record_emails_total(25)
     metrics_collector.record_run_total("ok")
@@ -102,8 +102,8 @@ def test_metrics_error_handling(metrics_collector):
     """Test metrics error handling."""
     # Test with invalid inputs
     try:
-        metrics_collector.record_llm_latency(-1, "gpt-4o-mini", "extract_actions")
-        metrics_collector.record_llm_tokens(-1, -1, "gpt-4o-mini")
+        metrics_collector.record_llm_latency(-1, "Qwen/Qwen3-30B-A3B-Instruct-2507", "extract_actions")
+        metrics_collector.record_llm_tokens(-1, -1, "Qwen/Qwen3-30B-A3B-Instruct-2507")
         metrics_collector.record_digest_build_time(-1)
         metrics_collector.record_emails_total(-1)
     except Exception:
@@ -179,8 +179,8 @@ def test_metrics_labels():
     
     try:
         # Record some metrics
-        metrics.record_llm_latency(100, "gpt-4o-mini", "extract_actions")
-        metrics.record_llm_tokens(100, 50, "gpt-4o-mini")
+        metrics.record_llm_latency(100, "Qwen/Qwen3-30B-A3B-Instruct-2507", "extract_actions")
+        metrics.record_llm_tokens(100, 50, "Qwen/Qwen3-30B-A3B-Instruct-2507")
         
         response = requests.get("http://localhost:9108/metrics", timeout=1)
         assert response.status_code == 200
@@ -188,7 +188,7 @@ def test_metrics_labels():
         content = response.text
         
         # Check that labels are present
-        assert "model=\"gpt-4o-mini\"" in content
+        assert "model=\"Qwen/Qwen3-30B-A3B-Instruct-2507\"" in content
         assert "operation=\"extract_actions\"" in content
     finally:
         # Clean up - server will be stopped when process ends

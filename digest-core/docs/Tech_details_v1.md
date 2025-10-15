@@ -183,7 +183,7 @@ ingest:
 llm:
   provider: gateway
   endpoint: https://llm-gw.corp/api/v1/chat
-  model: corp/gpt-4o-mini
+  model: corp/Qwen/Qwen3-30B-A3B-Instruct-2507
   masking: upstream_strict
   redact_tag_format: "[[REDACT:{attrs}]]"
   headers:
@@ -262,7 +262,7 @@ app = typer.Typer()
 
 @app.command()
 def run(from_date: str = "today", sources: str = "ews",
-        out: str = "./out", model: str = "corp/gpt-4o-mini"):
+        out: str = "./out", model: str = "corp/Qwen/Qwen3-30B-A3B-Instruct-2507"):
     run_digest(from_date, sources.split(","), out, model)
 
 if __name__ == "__main__":

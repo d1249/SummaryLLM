@@ -1028,4 +1028,4 @@ def run_digest_dry_run(from_date: str, sources: List[str], out: str, model: str,
 
 if __name__ == "__main__":
     # For testing
-    run_digest("today", ["ews"], "./out", "corp/gpt-4o-mini")
+    run_digest("today", ["ews"], "./out", "corp/Qwen/Qwen3-30B-A3B-Instruct-2507")

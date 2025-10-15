@@ -276,7 +276,7 @@ done
 python3.11 -m digest_core.cli run --dry-run
 
 # Test with different model
-python3.11 -m digest_core.cli run --model "gpt-3.5-turbo" --dry-run
+python3.11 -m digest_core.cli run --model "Qwen/Qwen3-30B-A3B-Instruct-2507" --dry-run
 ```
 
 **Multiple Mailboxes (if configured):**

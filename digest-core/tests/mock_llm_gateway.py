@@ -181,7 +181,7 @@ def create_mock_llm_config(port: int = 8080) -> Dict[str, Any]:
     """Create mock LLM configuration for testing."""
     return {
         "endpoint": f"http://localhost:{port}/api/v1/chat",
-        "model": "mock/gpt-4o-mini",
+        "model": "mock/Qwen/Qwen3-30B-A3B-Instruct-2507",
         "timeout_s": 30,
         "headers": {},
         "max_tokens_per_run": 30000,

@@ -13,7 +13,7 @@ def mock_config():
     config = Mock(spec=Config)
     config.llm.endpoint = "https://api.openai.com/v1/chat/completions"
     config.llm.headers = {"Authorization": "Bearer test-token"}
-    config.llm.model = "gpt-4o-mini"
+    config.llm.model = "Qwen/Qwen3-30B-A3B-Instruct-2507"
     config.llm.max_retries = 3
     config.llm.timeout = 30
     return config

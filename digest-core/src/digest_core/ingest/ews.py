@@ -4,6 +4,7 @@ Exchange Web Services (EWS) email ingestion with NTLM authentication.
 import structlog
 from datetime import datetime, timezone, timedelta
 from typing import List, NamedTuple, Optional
+from dataclasses import dataclass
 from pathlib import Path
 import pytz
 from exchangelib import (
@@ -20,7 +21,8 @@ from digest_core.utils.tz import ensure_aware, to_utc
 logger = structlog.get_logger()
 
 
-class NormalizedMessage(NamedTuple):
+@dataclass(frozen=True)
+class NormalizedMessage:
     """Normalized email message with canonical email metadata fields."""
     msg_id: str
     conversation_id: str

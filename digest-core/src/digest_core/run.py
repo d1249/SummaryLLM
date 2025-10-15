@@ -13,7 +13,7 @@ PIPELINE_VERSION = "1.1.0"
 DEFAULT_PROMPT_VERSION = "mvp.5"
 
 from digest_core.config import Config
-from digest_core.ingest.ews import EWSIngest
+from digest_core.ingest.ews import EWSIngest, NormalizedMessage
 from digest_core.normalize.html import HTMLNormalizer
 from digest_core.normalize.quotes import QuoteCleaner
 from digest_core.threads.build import ThreadBuilder
@@ -166,9 +166,27 @@ def run_digest(from_date: str, sources: List[str], out: str, model: str, window:
                 cleaned_body = text_body
             
             # Create normalized message
-            normalized_msg = msg._replace(
+            normalized_msg = NormalizedMessage(
+                msg_id=msg.msg_id,
+                conversation_id=msg.conversation_id,
+                datetime_received=msg.datetime_received,
+                sender_email=msg.sender_email,
+                subject=msg.subject,
                 text_body=cleaned_body,
-                subject=msg.subject
+                to_recipients=msg.to_recipients,
+                cc_recipients=msg.cc_recipients,
+                importance=msg.importance,
+                is_flagged=msg.is_flagged,
+                has_attachments=msg.has_attachments,
+                attachment_types=msg.attachment_types,
+                # Canonical fields
+                from_email=msg.from_email,
+                from_name=msg.from_name,
+                to_emails=msg.to_emails,
+                cc_emails=msg.cc_emails,
+                message_id=msg.message_id,
+                body_norm=cleaned_body,
+                received_at=msg.received_at
             )
             normalized_messages.append(normalized_msg)
         
@@ -935,9 +953,27 @@ def run_digest_dry_run(from_date: str, sources: List[str], out: str, model: str,
                 cleaned_body = text_body
             
             # Create normalized message
-            normalized_msg = msg._replace(
+            normalized_msg = NormalizedMessage(
+                msg_id=msg.msg_id,
+                conversation_id=msg.conversation_id,
+                datetime_received=msg.datetime_received,
+                sender_email=msg.sender_email,
+                subject=msg.subject,
                 text_body=cleaned_body,
-                subject=msg.subject
+                to_recipients=msg.to_recipients,
+                cc_recipients=msg.cc_recipients,
+                importance=msg.importance,
+                is_flagged=msg.is_flagged,
+                has_attachments=msg.has_attachments,
+                attachment_types=msg.attachment_types,
+                # Canonical fields
+                from_email=msg.from_email,
+                from_name=msg.from_name,
+                to_emails=msg.to_emails,
+                cc_emails=msg.cc_emails,
+                message_id=msg.message_id,
+                body_norm=cleaned_body,
+                received_at=msg.received_at
             )
             normalized_messages.append(normalized_msg)
         

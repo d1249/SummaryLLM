@@ -6,6 +6,7 @@
 ## Решение
 
 ### 1. Обновлена схема NormalizedMessage
+- **ИЗМЕНЕНО**: Переход с `NamedTuple` на `@dataclass(frozen=True)` для поддержки методов
 - Добавлены канонические поля для email метаданных:
   - `from_email: str` - основной email отправителя
   - `from_name: Optional[str]` - имя отправителя
@@ -33,11 +34,15 @@
   sender = msg.sender or msg.from_email or msg.sender_email or ""
   ```
 
-### 4. Добавлена метрика для мониторинга
+### 4. Исправлены вызовы _replace
+- Заменены все вызовы `msg._replace()` на создание новых объектов `NormalizedMessage`
+- Добавлен импорт `NormalizedMessage` в `run.py`
+
+### 5. Добавлена метрика для мониторинга
 - Новая метрика `actions_sender_missing_total` для отслеживания случаев отсутствия sender
 - Метод `record_action_sender_missing()` в MetricsCollector
 
-### 5. Добавлены тесты
+### 6. Добавлены тесты
 - Unit тесты для NormalizedMessage sender compatibility
 - Integration тесты для actions stage с missing sender
 - End-to-end тест для проверки основного фикса
@@ -48,10 +53,11 @@
 - ✅ Обратная совместимость сохранена
 - ✅ Добавлена observability для мониторинга
 - ✅ Все тесты проходят
+- ✅ Dataclass поддерживает методы (в отличие от NamedTuple)
 
 ## Файлы изменены
-- `digest-core/src/digest_core/ingest/ews.py` - схема NormalizedMessage
-- `digest-core/src/digest_core/run.py` - логика получения sender
+- `digest-core/src/digest_core/ingest/ews.py` - схема NormalizedMessage (NamedTuple → dataclass)
+- `digest-core/src/digest_core/run.py` - логика получения sender + исправление _replace
 - `digest-core/src/digest_core/observability/metrics.py` - новая метрика
 - `digest-core/tests/test_normalized_message_sender.py` - unit тесты
 - `digest-core/tests/test_actions_sender_integration.py` - integration тесты

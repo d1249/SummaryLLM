@@ -87,7 +87,8 @@ class HierarchicalProcessor:
         threads: List[ConversationThread],
         all_chunks: List[EvidenceChunk],
         digest_date: str,
-        trace_id: str
+        trace_id: str,
+        user_aliases: List[str] = None
     ) -> EnhancedDigest:
         """
         Process threads hierarchically.
@@ -97,16 +98,21 @@ class HierarchicalProcessor:
             all_chunks: All evidence chunks
             digest_date: Date for the digest
             trace_id: Trace ID for logging
+            user_aliases: User email aliases for must-include detection
         
         Returns:
             EnhancedDigest v2 instance
         """
         start_time = time.time()
         
+        if user_aliases is None:
+            user_aliases = []
+        
         logger.info("Starting hierarchical processing",
                    threads=len(threads),
                    chunks=len(all_chunks),
                    hierarchical_mode=True,
+                   user_aliases_count=len(user_aliases),
                    trace_id=trace_id)
         
         # Step 1: Group chunks by thread
@@ -117,7 +123,7 @@ class HierarchicalProcessor:
         
         # Step 3: Parallel per-thread summarization
         parallel_start = time.time()
-        thread_summaries = self._summarize_threads_parallel(threads_to_summarize, trace_id)
+        thread_summaries = self._summarize_threads_parallel(threads_to_summarize, trace_id, user_aliases)
         self.metrics.parallel_time_ms = int((time.time() - parallel_start) * 1000)
         
         # Step 4: Prepare final aggregator input (thread summaries + small thread chunks)
@@ -203,7 +209,8 @@ class HierarchicalProcessor:
     def _summarize_threads_parallel(
         self, 
         threads_to_summarize: Dict,
-        trace_id: str
+        trace_id: str,
+        user_aliases: List[str] = None
     ) -> List[ThreadSummary]:
         """
         Parallel per-thread summarization with timeout and degradation.
@@ -211,6 +218,7 @@ class HierarchicalProcessor:
         Args:
             threads_to_summarize: Dict mapping thread_id to chunks
             trace_id: Trace ID for logging
+            user_aliases: User email aliases for must-include detection
         
         Returns:
             List of ThreadSummary objects
@@ -221,9 +229,13 @@ class HierarchicalProcessor:
             logger.info("No threads to summarize")
             return summaries
         
+        if user_aliases is None:
+            user_aliases = []
+        
         logger.info("Starting parallel thread summarization",
                    threads=len(threads_to_summarize),
-                   pool_size=self.config.parallel_pool)
+                   pool_size=self.config.parallel_pool,
+                   user_aliases_count=len(user_aliases))
         
         with ThreadPoolExecutor(max_workers=self.config.parallel_pool) as executor:
             futures = {}
@@ -233,7 +245,8 @@ class HierarchicalProcessor:
                     self._summarize_single_thread, 
                     thread_id, 
                     chunks,
-                    trace_id
+                    trace_id,
+                    user_aliases
                 )
                 futures[future] = (thread_id, chunks)
             
@@ -274,11 +287,92 @@ class HierarchicalProcessor:
         
         return summaries
     
+    def _select_chunks_with_must_include(
+        self,
+        chunks: List[EvidenceChunk],
+        user_aliases: List[str],
+        max_chunks: int = 8
+    ) -> List[EvidenceChunk]:
+        """
+        Select chunks ensuring must-include chunks are present.
+        
+        Must-include chunks:
+        1. Chunks with user mentions
+        2. Last update chunk (most recent by timestamp)
+        
+        Args:
+            chunks: All chunks for thread (sorted by priority)
+            user_aliases: User email aliases for mention detection
+            max_chunks: Max chunks to select (8 normal, 12 with exceptions)
+        
+        Returns:
+            Selected chunks with must-include guaranteed
+        """
+        if not chunks:
+            return []
+        
+        must_include_chunks = []
+        regular_chunks = []
+        
+        # Find last update chunk (most recent)
+        last_update_chunk = max(chunks, key=lambda c: c.timestamp if c.timestamp else "")
+        
+        # Categorize chunks
+        for chunk in chunks:
+            is_must_include = False
+            
+            # Check for user mentions
+            if self.config.must_include_mentions and user_aliases:
+                chunk_text = chunk.text.lower()
+                if any(alias.lower() in chunk_text for alias in user_aliases):
+                    is_must_include = True
+                    must_include_chunks.append(chunk)
+                    logger.debug("Must-include: mention chunk", evidence_id=chunk.evidence_id)
+                    continue
+            
+            # Check if last update
+            if self.config.must_include_last_update and chunk == last_update_chunk:
+                if chunk not in must_include_chunks:
+                    is_must_include = True
+                    must_include_chunks.append(chunk)
+                    logger.debug("Must-include: last update chunk", evidence_id=chunk.evidence_id)
+                    continue
+            
+            # Regular chunk
+            regular_chunks.append(chunk)
+        
+        # Calculate available slots for regular chunks
+        must_include_count = len(must_include_chunks)
+        regular_slots = max_chunks - must_include_count
+        
+        # If too many must-include chunks, extend limit to exception threshold
+        if must_include_count > max_chunks:
+            logger.warning("Must-include chunks exceed limit, extending to exception threshold",
+                          must_include_count=must_include_count,
+                          max_chunks=max_chunks,
+                          exception_limit=self.config.per_thread_max_chunks_exception)
+            regular_slots = max(0, self.config.per_thread_max_chunks_exception - must_include_count)
+        
+        # Select top regular chunks
+        selected_regular = regular_chunks[:regular_slots]
+        
+        # Combine: must-include + regular (preserving priority order)
+        selected_chunks = must_include_chunks + selected_regular
+        
+        logger.info("Selected chunks with must-include",
+                   total_selected=len(selected_chunks),
+                   must_include=must_include_count,
+                   regular=len(selected_regular),
+                   max_chunks=max_chunks)
+        
+        return selected_chunks
+    
     def _summarize_single_thread(
         self, 
         thread_id: str, 
         chunks: List[EvidenceChunk],
-        trace_id: str
+        trace_id: str,
+        user_aliases: List[str] = None
     ) -> ThreadSummary:
         """
         Summarize single thread using LLM.
@@ -287,12 +381,36 @@ class HierarchicalProcessor:
             thread_id: Thread/conversation ID
             chunks: Evidence chunks for this thread
             trace_id: Trace ID for logging
+            user_aliases: User email aliases for must-include detection
         
         Returns:
             ThreadSummary object
         """
+        # Select chunks with must-include logic
+        if user_aliases is None:
+            user_aliases = []
+        
+        selected_chunks = self._select_chunks_with_must_include(
+            chunks,
+            user_aliases,
+            max_chunks=self.config.per_thread_max_chunks_in
+        )
+        
+        # Skip LLM if no evidence after selection
+        if not selected_chunks and self.config.skip_llm_if_no_evidence:
+            logger.info("Skipping LLM for thread (no evidence after selection)",
+                       thread_id=thread_id)
+            # Return empty summary
+            return ThreadSummary(
+                thread_id=thread_id,
+                key_points=[],
+                actions=[],
+                deadlines=[],
+                risks=[]
+            )
+        
         # Prepare chunks text
-        chunks_text = self._prepare_thread_chunks_text(chunks)
+        chunks_text = self._prepare_thread_chunks_text(selected_chunks)
         
         # Load prompt
         try:
@@ -473,6 +591,39 @@ class HierarchicalProcessor:
             evidence_ids=evidence_ids
         )
     
+    def _extract_key_citations_from_chunks(
+        self,
+        chunks: List[EvidenceChunk],
+        max_citations: int = 5
+    ) -> List[str]:
+        """
+        Extract 3-5 key citations from thread chunks (merge policy).
+        
+        Args:
+            chunks: Evidence chunks for thread
+            max_citations: Max number of citations (3-5)
+        
+        Returns:
+            List of citation strings
+        """
+        if not chunks:
+            return []
+        
+        citations = []
+        # Select top chunks by priority
+        top_chunks = chunks[:max_citations]
+        
+        for chunk in top_chunks:
+            # Extract a meaningful snippet (first 150 chars)
+            snippet = chunk.text[:150].strip()
+            if len(chunk.text) > 150:
+                snippet += "..."
+            
+            citation = f"[{chunk.evidence_id}] {snippet}"
+            citations.append(citation)
+        
+        return citations
+    
     def _prepare_aggregator_input(
         self,
         thread_summaries: List[ThreadSummary],
@@ -483,7 +634,7 @@ class HierarchicalProcessor:
         Prepare final aggregator input.
         
         Combines:
-        - Thread summaries (for large threads)
+        - Thread summaries (for large threads) with key citations (merge policy)
         - Direct chunks (for small threads < 3 chunks)
         - Thread headers (From/Subject/Recency)
         
@@ -497,10 +648,28 @@ class HierarchicalProcessor:
         """
         parts = []
         
-        # Add thread summaries (large threads)
+        # Add thread summaries (large threads) with merge policy
         for summary in thread_summaries:
+            thread_chunks = summarized_threads.get(summary.thread_id, [])
+            
+            # Merge policy: title + key citations
             parts.append(f"=== Thread: {summary.thread_id} ===")
-            parts.append(f"Summary: {summary.summary}")
+            
+            if self.config.merge_include_title:
+                parts.append(f"Summary: {summary.summary}")
+            
+            # Add key citations (3-5)
+            if self.config.merge_max_citations > 0 and thread_chunks:
+                key_citations = self._extract_key_citations_from_chunks(
+                    thread_chunks,
+                    max_citations=self.config.merge_max_citations
+                )
+                if key_citations:
+                    parts.append(f"\nKey Citations ({len(key_citations)}):")
+                    for cit in key_citations:
+                        parts.append(f"  {cit}")
+            
+            parts.append(f"Summary (full): {summary.summary}")
             
             if summary.pending_actions:
                 parts.append(f"\nActions ({len(summary.pending_actions)}):")

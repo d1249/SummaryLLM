@@ -73,21 +73,96 @@ shrink:
 
 hierarchical:
   enable: true              # Enable hierarchical mode
+  auto_enable: true         # Auto-enable based on thresholds
   enable_auto: true         # Enable automatic hierarchical mode activation
   threshold_threads: 40     # Thread count threshold for auto activation (умеренный порог)
   threshold_emails: 200     # Email count threshold for auto activation
   min_threads_to_summarize: 6  # Minimum threads required to use hierarchical mode
-  min_threads: 30           # Min threads to activate (deprecated, use threshold_threads)
-  min_emails: 150           # Min emails to activate (deprecated, use threshold_emails)
+  min_threads: 60           # Min threads to auto-activate (was 30)
+  min_emails: 300           # Min emails to auto-activate (was 150)
   per_thread_max_chunks_in: 8  # Max chunks per thread for summarization
+  per_thread_max_chunks_exception: 12  # Max chunks in exceptional cases (mentions, last update)
   summary_max_tokens: 90    # Max tokens for thread summary
   parallel_pool: 8          # Max parallel thread summarization workers
   timeout_sec: 20           # Timeout per thread summarization
   degrade_on_timeout: "best_2_chunks"  # Degradation strategy on timeout
+  
+  # Must-include chunks (guarantee critical info)
+  must_include_mentions: true  # Always include chunks with user mentions
+  must_include_last_update: true  # Always include last update chunk per thread
+  
+  # Merge policy (citation enrichment)
+  merge_max_citations: 5    # Max citations in merged summary (3-5)
+  merge_include_title: true # Include brief title in merged summary
+  
+  # Optimization
+  skip_llm_if_no_evidence: true  # Skip LLM call if no evidence after selection
+  
   final_input_token_cap: 4000  # Max tokens for final aggregator input
   max_latency_increase_pct: 50  # Max acceptable latency increase %
   target_latency_increase_pct: 30  # Target latency increase %
   max_cost_increase_per_email_pct: 40  # Max acceptable cost increase per email %
+
+email_cleaner:
+  enabled: true             # Enable email body cleaning
+  keep_top_quote_head: true # Keep 1-2 paragraphs from top-level quote (inline replies)
+  max_top_quote_paragraphs: 2  # Max paragraphs to keep from top quote
+  max_top_quote_lines: 10   # Max lines to keep from top quote
+  max_quote_removal_length: 10000  # Safety limit: max chars to remove in single block
+  locales:                  # Supported locales for pattern matching
+    - ru
+    - en
+  whitelist_patterns:       # Patterns to preserve even in quoted areas
+    - '\b(deadline|срок|дедлайн|до)\s+\d{1,2}[./]\d{1,2}'  # Deadlines
+    - '\b(approve|одобр|согласов)'  # Approval requests
+  blacklist_patterns:       # Additional patterns to remove aggressively
+    - 'Click here to unsubscribe'
+    - 'Нажмите.*отписаться'
+    - 'Privacy Policy'
+    - 'Политика конфиденциальности'
+  track_removed_spans: true # Track removed text spans for offset mapping
+
+nlp:
+  # Custom action verbs for domain-specific extraction
+  # Format: verb_form: lemma
+  custom_action_verbs:
+    # EN domain-specific verbs
+    deploy: deploy
+    deployed: deploy
+    deploying: deploy
+    deploys: deploy
+    merge: merge
+    merged: merge
+    merging: merge
+    merges: merge
+    # RU domain-specific verbs
+    задеплоить: задеплоить
+    задеплой: задеплоить
+    задеплойте: задеплоить
+    замержить: замержить
+    замержь: замержить
+    замержьте: замержить
+
+ranker:
+  enabled: true              # Enable ranking of digest items
+  # Feature weights (will be normalized to sum to 1.0)
+  weight_user_in_to: 0.15    # User is direct recipient (To)
+  weight_user_in_cc: 0.05    # User is CC recipient
+  weight_has_action: 0.20    # Item contains action markers
+  weight_has_mention: 0.10   # Item mentions user
+  weight_has_due_date: 0.15  # Item has deadline
+  weight_sender_importance: 0.10  # Sender is important
+  weight_thread_length: 0.05 # Long conversation thread
+  weight_recency: 0.10       # Recent message
+  weight_has_attachments: 0.05  # Has attachments
+  weight_has_project_tag: 0.05  # Has project tag (JIRA, etc.)
+  
+  important_senders:         # Important sender emails or domain patterns
+    - 'ceo@'
+    - 'cto@'
+    - 'manager@'
+  
+  log_positions: true        # Log item positions for A/B analysis
 
 degrade:
   enable: true              # Enable degradation on LLM failures

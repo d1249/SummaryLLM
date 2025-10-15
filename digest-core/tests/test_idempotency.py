@@ -51,7 +51,7 @@ def test_idempotency_within_48h(temp_output_dir, temp_state_dir):
                                                         from_date="2024-01-15",
                                                         sources=["ews"],
                                                         out=str(temp_output_dir),
-                                                        model="gpt-4o-mini"
+                                                        model="Qwen/Qwen3-30B-A3B-Instruct-2507"
                                                     )
                                                     
                                                     # Should not call EWS or other components
@@ -99,7 +99,7 @@ def test_idempotency_outside_48h(temp_output_dir, temp_state_dir):
                                                         from_date="2024-01-15",
                                                         sources=["ews"],
                                                         out=str(temp_output_dir),
-                                                        model="gpt-4o-mini"
+                                                        model="Qwen/Qwen3-30B-A3B-Instruct-2507"
                                                     )
                                                     
                                                     # Should call EWS
@@ -135,7 +135,7 @@ def test_idempotency_missing_artifacts(temp_output_dir, temp_state_dir):
                                                         from_date="2024-01-15",
                                                         sources=["ews"],
                                                         out=str(temp_output_dir),
-                                                        model="gpt-4o-mini"
+                                                        model="Qwen/Qwen3-30B-A3B-Instruct-2507"
                                                     )
                                                     
                                                     # Should call EWS
@@ -173,7 +173,7 @@ def test_idempotency_partial_artifacts(temp_output_dir, temp_state_dir):
                                                         from_date="2024-01-15",
                                                         sources=["ews"],
                                                         out=str(temp_output_dir),
-                                                        model="gpt-4o-mini"
+                                                        model="Qwen/Qwen3-30B-A3B-Instruct-2507"
                                                     )
                                                     
                                                     # Should call EWS

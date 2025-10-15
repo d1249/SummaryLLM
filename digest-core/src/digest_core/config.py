@@ -158,26 +158,114 @@ class ShrinkConfig(BaseModel):
     preserve_min_quotas: bool = Field(default=True, description="Preserve minimum bucket quotas during shrink")
 
 
+class EmailCleanerConfig(BaseModel):
+    """Configuration for email body cleaning (quotes, signatures, disclaimers)."""
+    enabled: bool = Field(default=True, description="Enable email body cleaning")
+    keep_top_quote_head: bool = Field(default=True, description="Keep 1-2 paragraphs from top-level quote")
+    max_top_quote_paragraphs: int = Field(default=2, description="Max paragraphs to keep from top quote")
+    max_top_quote_lines: int = Field(default=10, description="Max lines to keep from top quote")
+    max_quote_removal_length: int = Field(default=10000, description="Max chars to remove in single quote block (safety limit)")
+    
+    locales: List[str] = Field(default=["ru", "en"], description="Supported locales for pattern matching")
+    
+    # Pattern whitelists (regexes that should NOT be removed even if in quoted/signature area)
+    whitelist_patterns: List[str] = Field(
+        default_factory=lambda: [
+            r'\b(deadline|срок|дедлайн|до)\s+\d{1,2}[./]\d{1,2}',  # Deadlines
+            r'\b(approve|одобр|согласов)',  # Approval requests
+        ],
+        description="Patterns to preserve even in quoted areas"
+    )
+    
+    # Pattern blacklists (additional patterns to aggressively remove)
+    blacklist_patterns: List[str] = Field(
+        default_factory=lambda: [
+            r'Click here to unsubscribe',
+            r'Нажмите.*отписаться',
+            r'Privacy Policy',
+            r'Политика конфиденциальности',
+        ],
+        description="Additional patterns to remove aggressively"
+    )
+    
+    # Track removed spans for offset mapping
+    track_removed_spans: bool = Field(default=True, description="Track removed text spans for offset mapping")
+
+
 class HierarchicalConfig(BaseModel):
     """Configuration for hierarchical digest mode."""
     enable: bool = Field(default=True, description="Enable hierarchical mode")
+    auto_enable: bool = Field(default=True, description="Auto-enable based on thresholds")
     enable_auto: bool = Field(default=True, description="Enable automatic hierarchical mode activation")
     threshold_threads: int = Field(default=40, description="Thread count threshold for auto activation")
     threshold_emails: int = Field(default=200, description="Email count threshold for auto activation")
     min_threads_to_summarize: int = Field(default=6, description="Minimum threads required to use hierarchical mode")
-    min_threads: int = Field(default=30, description="Min threads to activate (deprecated, use threshold_threads)")
-    min_emails: int = Field(default=150, description="Min emails to activate (deprecated, use threshold_emails)")
+    min_threads: int = Field(default=60, description="Min threads to auto-activate (was 30)")
+    min_emails: int = Field(default=300, description="Min emails to auto-activate (was 150)")
     
     per_thread_max_chunks_in: int = Field(default=8, description="Max chunks per thread for summarization")
+    per_thread_max_chunks_exception: int = Field(default=12, description="Max chunks in exceptional cases (mentions, last update)")
     summary_max_tokens: int = Field(default=90, description="Max tokens for thread summary")
     parallel_pool: int = Field(default=8, description="Max parallel thread summarization workers")
     timeout_sec: int = Field(default=20, description="Timeout per thread summarization")
     degrade_on_timeout: str = Field(default="best_2_chunks", description="Degradation strategy on timeout")
     
+    # Must-include chunks
+    must_include_mentions: bool = Field(default=True, description="Always include chunks with user mentions")
+    must_include_last_update: bool = Field(default=True, description="Always include last update chunk per thread")
+    
+    # Merge policy
+    merge_max_citations: int = Field(default=5, description="Max citations in merged summary (3-5)")
+    merge_include_title: bool = Field(default=True, description="Include brief title in merged summary")
+    
+    # Optimization
+    skip_llm_if_no_evidence: bool = Field(default=True, description="Skip LLM call if no evidence after selection")
+    
     final_input_token_cap: int = Field(default=4000, description="Max tokens for final aggregator input")
     max_latency_increase_pct: int = Field(default=50, description="Max acceptable latency increase %")
     target_latency_increase_pct: int = Field(default=30, description="Target latency increase %")
     max_cost_increase_per_email_pct: int = Field(default=40, description="Max acceptable cost increase per email %")
+
+
+class NLPConfig(BaseModel):
+    """Configuration for NLP features (lemmatization, action extraction)."""
+    # Custom action verbs: form → lemma mapping for domain-specific actions
+    custom_action_verbs: Dict[str, str] = Field(
+        default_factory=lambda: {
+            # EN domain-specific examples
+            'deploy': 'deploy', 'deployed': 'deploy', 'deploying': 'deploy',
+            'merge': 'merge', 'merged': 'merge', 'merging': 'merge',
+            
+            # RU domain-specific examples
+            'задеплоить': 'задеплоить', 'задеплой': 'задеплоить',
+            'замержить': 'замержить', 'замержь': 'замержить',
+        },
+        description="Custom verb forms for domain-specific action extraction"
+    )
+
+
+class RankerConfig(BaseModel):
+    """Configuration for digest item ranking."""
+    enabled: bool = Field(default=True, description="Enable ranking of digest items")
+    
+    # Feature weights (will be normalized to sum to 1.0)
+    weight_user_in_to: float = Field(default=0.15, ge=0.0, le=1.0, description="Weight for user as direct recipient (To)")
+    weight_user_in_cc: float = Field(default=0.05, ge=0.0, le=1.0, description="Weight for user as CC recipient")
+    weight_has_action: float = Field(default=0.20, ge=0.0, le=1.0, description="Weight for item containing action markers")
+    weight_has_mention: float = Field(default=0.10, ge=0.0, le=1.0, description="Weight for item mentioning user")
+    weight_has_due_date: float = Field(default=0.15, ge=0.0, le=1.0, description="Weight for item having a deadline")
+    weight_sender_importance: float = Field(default=0.10, ge=0.0, le=1.0, description="Weight for sender being important")
+    weight_thread_length: float = Field(default=0.05, ge=0.0, le=1.0, description="Weight for long conversation thread")
+    weight_recency: float = Field(default=0.10, ge=0.0, le=1.0, description="Weight for recent message")
+    weight_has_attachments: float = Field(default=0.05, ge=0.0, le=1.0, description="Weight for message having attachments")
+    weight_has_project_tag: float = Field(default=0.05, ge=0.0, le=1.0, description="Weight for message having a project tag (e.g., JIRA)")
+    
+    important_senders: List[str] = Field(
+        default_factory=list,
+        description="List of important sender email addresses or domain patterns (e.g., 'ceo@', 'example.com')"
+    )
+    
+    log_positions: bool = Field(default=True, description="Log item positions for A/B analysis")
 
 
 class DegradeConfig(BaseModel):
@@ -200,6 +288,9 @@ class Config(BaseSettings):
     chunking: ChunkingConfig = Field(default_factory=ChunkingConfig)
     shrink: ShrinkConfig = Field(default_factory=ShrinkConfig)
     hierarchical: HierarchicalConfig = Field(default_factory=HierarchicalConfig)
+    email_cleaner: EmailCleanerConfig = Field(default_factory=EmailCleanerConfig)
+    nlp: NLPConfig = Field(default_factory=NLPConfig)
+    ranker: RankerConfig = Field(default_factory=RankerConfig)
     degrade: DegradeConfig = Field(default_factory=DegradeConfig)
     
     class Config:
@@ -300,6 +391,12 @@ class Config(BaseSettings):
             self.shrink = ShrinkConfig(**yaml_config['shrink'])
         if 'hierarchical' in yaml_config:
             self.hierarchical = HierarchicalConfig(**yaml_config['hierarchical'])
+        if 'email_cleaner' in yaml_config:
+            self.email_cleaner = EmailCleanerConfig(**yaml_config['email_cleaner'])
+        if 'nlp' in yaml_config:
+            self.nlp = NLPConfig(**yaml_config['nlp'])
+        if 'ranker' in yaml_config:
+            self.ranker = RankerConfig(**yaml_config['ranker'])
         if 'degrade' in yaml_config:
             self.degrade = DegradeConfig(**yaml_config['degrade'])
     

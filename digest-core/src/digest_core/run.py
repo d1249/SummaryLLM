@@ -25,15 +25,18 @@ from digest_core.assemble.markdown import MarkdownAssembler
 from digest_core.observability.logs import setup_logging
 from digest_core.observability.metrics import MetricsCollector
 from digest_core.observability.healthz import start_health_server
-from digest_core.llm.schemas import Digest, EnhancedDigest
+from digest_core.llm.schemas import Digest, EnhancedDigest, ExtractedActionItem
 from digest_core.hierarchical import HierarchicalProcessor
+from digest_core.evidence.citations import CitationBuilder, CitationValidator, enrich_item_with_citations
+from digest_core.evidence.actions import ActionMentionExtractor, enrich_actions_with_evidence
+from digest_core.select.ranker import DigestRanker
 from digest_core.llm.degrade import extractive_fallback
 
 
 logger = structlog.get_logger()
 
 
-def run_digest(from_date: str, sources: List[str], out: str, model: str, window: str, state: str | None) -> None:
+def run_digest(from_date: str, sources: List[str], out: str, model: str, window: str, state: str | None, validate_citations: bool = False) -> bool:
     """
     Run the complete digest pipeline.
     
@@ -42,6 +45,12 @@ def run_digest(from_date: str, sources: List[str], out: str, model: str, window:
         sources: List of source types to process (e.g., ["ews"])
         out: Output directory path
         model: LLM model identifier
+        window: Time window (calendar_day or rolling_24h)
+        state: State directory path override
+        validate_citations: If True, enforce citation validation
+    
+    Returns:
+        True if citations validation passed (or not enabled), False otherwise
     """
     # Generate trace ID for this run
     trace_id = str(uuid.uuid4())
@@ -99,7 +108,7 @@ def run_digest(from_date: str, sources: List[str], out: str, model: str, window:
                        artifact_age_hours=artifact_age_hours,
                        trace_id=trace_id)
             metrics.record_run_total("ok")
-            return
+            return True
         else:
             logger.info("Existing artifacts outside T-48h window, rebuilding",
                        digest_date=digest_date,
@@ -126,9 +135,15 @@ def run_digest(from_date: str, sources: List[str], out: str, model: str, window:
         # Step 2: Normalize messages
         logger.info("Starting message normalization", stage="normalize")
         normalizer = HTMLNormalizer()
-        quote_cleaner = QuoteCleaner()
+        quote_cleaner = QuoteCleaner(
+            keep_top_quote_head=config.email_cleaner.keep_top_quote_head,
+            config=config.email_cleaner
+        )
         
         normalized_messages = []
+        total_removed_chars = 0
+        total_removed_blocks = 0
+        
         for msg in messages:
             # HTML to text conversion
             text_body = normalizer.html_to_text(msg.text_body)
@@ -136,8 +151,19 @@ def run_digest(from_date: str, sources: List[str], out: str, model: str, window:
             # Truncate large bodies (200KB limit)
             text_body = normalizer.truncate_text(text_body, max_bytes=200000)
             
-            # Clean quotes and signatures
-            cleaned_body = quote_cleaner.clean_quotes(text_body)
+            # Clean quotes and signatures with span tracking (new extractive pipeline)
+            if config.email_cleaner.enabled:
+                cleaned_body, removed_spans = quote_cleaner.clean_email_body(text_body, lang="auto", policy="standard")
+                
+                # Record metrics
+                for span in removed_spans:
+                    span_chars = span.end - span.start
+                    total_removed_chars += span_chars
+                    total_removed_blocks += 1
+                    metrics.record_cleaner_removed_chars(span_chars, span.type)
+                    metrics.record_cleaner_removed_blocks(1, span.type)
+            else:
+                cleaned_body = text_body
             
             # Create normalized message
             normalized_msg = msg._replace(
@@ -146,13 +172,46 @@ def run_digest(from_date: str, sources: List[str], out: str, model: str, window:
             )
             normalized_messages.append(normalized_msg)
         
-        logger.info("Message normalization completed", messages_normalized=len(normalized_messages))
+        logger.info("Message normalization completed", 
+                   messages_normalized=len(normalized_messages),
+                   total_removed_chars=total_removed_chars,
+                   total_removed_blocks=total_removed_blocks)
+        
+        # Build normalized messages map for citation tracking
+        normalized_messages_map = {
+            msg.msg_id: msg.text_body
+            for msg in normalized_messages
+        }
+        logger.info("Built normalized messages map", map_size=len(normalized_messages_map))
         
         # Step 3: Build conversation threads
         logger.info("Starting thread building", stage="threads")
+        original_message_count = len(normalized_messages)
         thread_builder = ThreadBuilder()
         threads = thread_builder.build_threads(normalized_messages)
-        logger.info("Thread building completed", threads_created=len(threads))
+        
+        # Record threading metrics
+        thread_stats = thread_builder.get_stats()
+        if thread_stats.get('threads_merged_by_id', 0) > 0:
+            metrics.record_thread_merged('by_id')
+        if thread_stats.get('threads_merged_by_subject', 0) > 0:
+            metrics.record_thread_merged('by_subject')
+        if thread_stats.get('threads_merged_by_semantic', 0) > 0:
+            metrics.record_thread_merged('by_semantic')
+        if thread_stats.get('subjects_normalized', 0) > 0:
+            metrics.record_subject_normalized(thread_stats['subjects_normalized'])
+        if thread_stats.get('duplicates_found', 0) > 0:
+            metrics.record_duplicate_found(thread_stats['duplicates_found'])
+        
+        # Calculate redundancy index
+        unique_message_count = sum(len(t.messages) for t in threads)
+        redundancy = thread_builder.calculate_redundancy_index(original_message_count, unique_message_count)
+        metrics.update_redundancy_index(redundancy)
+        
+        logger.info("Thread building completed",
+                   threads_created=len(threads),
+                   redundancy_reduction=f"{redundancy*100:.1f}%",
+                   **thread_stats)
         
         # Step 4: Split into evidence chunks
         logger.info("Starting evidence splitting", stage="evidence")
@@ -170,6 +229,39 @@ def run_digest(from_date: str, sources: List[str], out: str, model: str, window:
                    evidence_chunks=len(evidence_chunks),
                    total_emails=total_emails,
                    total_threads=total_threads)
+        
+        # Step 4.5: Extract actions and mentions (rule-based)
+        logger.info("Starting action/mention extraction", stage="actions")
+        action_extractor = ActionMentionExtractor(
+            user_aliases=config.ews.user_aliases,
+            user_timezone=config.time.user_timezone
+        )
+        
+        all_extracted_actions = []
+        for msg in normalized_messages:
+            # Extract actions from this message
+            msg_actions = action_extractor.extract_mentions_actions(
+                text=msg.text_body,
+                msg_id=msg.msg_id,
+                sender=msg.sender,
+                sender_rank=0.5  # TODO: implement sender ranking
+            )
+            
+            # Enrich with evidence_id
+            msg_actions = enrich_actions_with_evidence(msg_actions, evidence_chunks, msg.msg_id)
+            
+            # Record metrics
+            for action in msg_actions:
+                metrics.record_action_found(action.type)
+                metrics.record_action_confidence(action.confidence)
+                if action.type == "mention":
+                    metrics.record_mention_found()
+            
+            all_extracted_actions.extend(msg_actions)
+        
+        logger.info("Action/mention extraction completed",
+                   total_actions=len(all_extracted_actions),
+                   avg_confidence=sum(a.confidence for a in all_extracted_actions) / len(all_extracted_actions) if all_extracted_actions else 0)
         
         # Step 5: Select relevant context
         logger.info("Starting context selection", stage="select")
@@ -246,9 +338,20 @@ def run_digest(from_date: str, sources: List[str], out: str, model: str, window:
         partial_reason = None
         
         if use_hierarchical:
+            # Determine trigger reason for metrics
+            trigger_reason = "manual"
+            if config.hierarchical.auto_enable:
+                if len(threads) >= config.hierarchical.min_threads:
+                    trigger_reason = "auto_threads"
+                elif len(messages) >= config.hierarchical.min_emails:
+                    trigger_reason = "auto_emails"
+            
+            metrics.record_hierarchical_run(trigger_reason)
+            
             logger.info("Using hierarchical mode",
                        threads=len(threads),
                        emails=len(messages),
+                       trigger_reason=trigger_reason,
                        trace_id=trace_id)
             
             try:
@@ -257,12 +360,20 @@ def run_digest(from_date: str, sources: List[str], out: str, model: str, window:
                     threads=threads,
                     all_chunks=evidence_chunks,
                     digest_date=digest_date,
-                    trace_id=trace_id
+                    trace_id=trace_id,
+                    user_aliases=config.ews.user_aliases
                 )
                 
                 # Log hierarchical metrics
                 h_metrics = hierarchical_processor.metrics.to_dict()
                 logger.info("Hierarchical processing completed", **h_metrics)
+                
+                # Calculate and record avg subsummary chunks
+                if h_metrics.get('threads_summarized', 0) > 0:
+                    avg_chunks = sum(hierarchical_processor.metrics.per_thread_tokens) / h_metrics['threads_summarized']
+                    # Rough estimate: tokens to chunks
+                    avg_chunks_estimate = avg_chunks / 300  # Assume ~300 tokens per chunk
+                    metrics.update_avg_subsummary_chunks(avg_chunks_estimate)
                 
                 # Use EnhancedDigest (v2)
                 digest_data = digest
@@ -447,6 +558,181 @@ def run_digest(from_date: str, sources: List[str], out: str, model: str, window:
             except Exception:
                 pass
         
+        # Step 6.5: Enrich with citations (extractive traceability)
+        logger.info("Starting citation enrichment", stage="citations")
+        citation_builder = CitationBuilder(normalized_messages_map)
+        citation_validation_passed = True
+        
+        # Enrich all digest items with citations
+        all_items = []
+        if use_hierarchical:
+            all_items.extend(digest_data.my_actions)
+            all_items.extend(digest_data.others_actions)
+            all_items.extend(digest_data.deadlines_meetings)
+            all_items.extend(digest_data.risks_blockers)
+            all_items.extend(digest_data.fyi)
+        else:
+            for section in digest_data.sections:
+                all_items.extend(section.items)
+        
+        for item in all_items:
+            enrich_item_with_citations(item, evidence_chunks, citation_builder)
+            # Record metric for citations per item
+            metrics.record_citations_per_item(len(item.citations))
+        
+        logger.info("Citation enrichment completed", 
+                   total_items=len(all_items),
+                   total_citations=sum(len(item.citations) for item in all_items))
+        
+        # Validate citations if requested
+        if validate_citations:
+            logger.info("Starting citation validation")
+            citation_validator = CitationValidator(normalized_messages_map)
+            
+            # Collect all citations
+            all_citations = []
+            for item in all_items:
+                all_citations.extend(item.citations)
+            
+            # Run validation
+            citation_validation_passed = citation_validator.validate_citations(
+                all_citations, 
+                strict=False  # Collect all errors, not just first
+            )
+            
+            if not citation_validation_passed:
+                logger.error("Citation validation failed",
+                           errors=len(citation_validator.validation_errors),
+                           error_details=citation_validator.validation_errors[:10])  # Log first 10 errors
+                
+                # Record validation failures
+                for error_info in citation_validator.validation_errors:
+                    # Extract failure type from error message
+                    error_msg = error_info.get('error', '')
+                    if 'offset' in error_msg.lower():
+                        failure_type = 'offset_invalid'
+                    elif 'checksum' in error_msg.lower():
+                        failure_type = 'checksum_mismatch'
+                    elif 'not found' in error_msg.lower():
+                        failure_type = 'not_found'
+                    elif 'preview mismatch' in error_msg.lower():
+                        failure_type = 'preview_mismatch'
+                    else:
+                        failure_type = 'other'
+                    
+                    metrics.record_citation_validation_failure(failure_type)
+            else:
+                logger.info("Citation validation passed", total_citations=len(all_citations))
+        
+        # Step 6.6: Enrich extracted actions with citations and add to digest
+        if use_hierarchical and all_extracted_actions:
+            logger.info("Enriching extracted actions with citations")
+            
+            # Convert ExtractedAction to ExtractedActionItem
+            evidence_to_subject = {chunk.evidence_id: chunk.message_metadata.get("subject", "") 
+                                  for chunk in evidence_chunks}
+            
+            for action in all_extracted_actions:
+                # Create ExtractedActionItem
+                extracted_item = ExtractedActionItem(
+                    type=action.type,
+                    who=action.who,
+                    verb=action.verb,
+                    text=action.text,
+                    due=action.due,
+                    confidence=action.confidence,
+                    evidence_id=action.evidence_id,
+                    email_subject=evidence_to_subject.get(action.evidence_id, "")
+                )
+                
+                # Enrich with citations
+                enrich_item_with_citations(extracted_item, evidence_chunks, citation_builder)
+                metrics.record_citations_per_item(len(extracted_item.citations))
+                
+                # Add to digest
+                digest_data.extracted_actions.append(extracted_item)
+            
+            # Sort by confidence (highest first)
+            digest_data.extracted_actions.sort(key=lambda a: a.confidence, reverse=True)
+            
+            logger.info("Extracted actions enriched and added to digest",
+                       total_extracted_actions=len(digest_data.extracted_actions))
+        
+        # Step 6.7: Rank digest items by actionability
+        if config.ranker.enabled:
+            logger.info("Starting item ranking", stage="ranking")
+            
+            # Prepare weights from config
+            weights = {
+                'user_in_to': config.ranker.weight_user_in_to,
+                'user_in_cc': config.ranker.weight_user_in_cc,
+                'has_action': config.ranker.weight_has_action,
+                'has_mention': config.ranker.weight_has_mention,
+                'has_due_date': config.ranker.weight_has_due_date,
+                'sender_importance': config.ranker.weight_sender_importance,
+                'thread_length': config.ranker.weight_thread_length,
+                'recency': config.ranker.weight_recency,
+                'has_attachments': config.ranker.weight_has_attachments,
+                'has_project_tag': config.ranker.weight_has_project_tag,
+            }
+            
+            # Initialize ranker
+            ranker = DigestRanker(
+                weights=weights,
+                user_aliases=config.ews.user_aliases,
+                important_senders=config.ranker.important_senders
+            )
+            
+            # Rank different item types
+            if use_hierarchical:
+                # Rank my_actions (most important)
+                if digest_data.my_actions:
+                    digest_data.my_actions = ranker.rank_items(digest_data.my_actions, evidence_chunks)
+                    for item in digest_data.my_actions:
+                        if hasattr(item, 'rank_score'):
+                            metrics.record_rank_score(item.rank_score)
+                
+                # Rank others_actions
+                if digest_data.others_actions:
+                    digest_data.others_actions = ranker.rank_items(digest_data.others_actions, evidence_chunks)
+                    for item in digest_data.others_actions:
+                        if hasattr(item, 'rank_score'):
+                            metrics.record_rank_score(item.rank_score)
+                
+                # Rank deadlines_meetings
+                if digest_data.deadlines_meetings:
+                    digest_data.deadlines_meetings = ranker.rank_items(digest_data.deadlines_meetings, evidence_chunks)
+                    for item in digest_data.deadlines_meetings:
+                        if hasattr(item, 'rank_score'):
+                            metrics.record_rank_score(item.rank_score)
+                
+                # Rank risks_blockers
+                if digest_data.risks_blockers:
+                    digest_data.risks_blockers = ranker.rank_items(digest_data.risks_blockers, evidence_chunks)
+                
+                # Rank FYI
+                if digest_data.fyi:
+                    digest_data.fyi = ranker.rank_items(digest_data.fyi, evidence_chunks)
+                
+                # Calculate top10 actions share (from my_actions)
+                if digest_data.my_actions:
+                    top10_share = ranker.get_top_n_actions_share(digest_data.my_actions, n=min(10, len(digest_data.my_actions)))
+                    metrics.update_top10_actions_share(top10_share)
+            else:
+                # Legacy v1: rank items within each section
+                for section in digest_data.sections:
+                    if section.items:
+                        section.items = ranker.rank_items(section.items, evidence_chunks)
+                        for item in section.items:
+                            if hasattr(item, 'rank_score'):
+                                metrics.record_rank_score(item.rank_score)
+            
+            metrics.set_ranking_enabled(True)
+            logger.info("Item ranking completed")
+        else:
+            metrics.set_ranking_enabled(False)
+            logger.info("Item ranking disabled")
+        
         # Step 7: Assemble outputs
         logger.info("Starting output assembly", stage="assemble")
         output_dir.mkdir(parents=True, exist_ok=True)
@@ -507,12 +793,24 @@ def run_digest(from_date: str, sources: List[str], out: str, model: str, window:
         metrics.record_run_total("ok")
         metrics.record_digest_build_time()
         
+        # Calculate total items for logging
+        if use_hierarchical:
+            total_items = (len(digest_data.my_actions) + len(digest_data.others_actions) + 
+                          len(digest_data.deadlines_meetings) + len(digest_data.risks_blockers) + 
+                          len(digest_data.fyi))
+        else:
+            total_items = sum(len(section.items) for section in digest_data.sections)
+        
         logger.info(
             "Digest run completed successfully",
             trace_id=trace_id,
             digest_date=digest_date,
-            total_items=sum(len(section.items) for section in digest_data.sections)
+            total_items=total_items,
+            citations_validated=validate_citations,
+            validation_passed=citation_validation_passed if validate_citations else None
         )
+        
+        return citation_validation_passed
         
     except Exception as e:
         logger.error(
@@ -525,7 +823,7 @@ def run_digest(from_date: str, sources: List[str], out: str, model: str, window:
         raise
 
 
-def run_digest_dry_run(from_date: str, sources: List[str], out: str, model: str, window: str, state: str | None) -> None:
+def run_digest_dry_run(from_date: str, sources: List[str], out: str, model: str, window: str, state: str | None, validate_citations: bool = False) -> None:
     """
     Run digest pipeline in dry-run mode (ingest+normalize only, no LLM/assemble).
     
@@ -534,6 +832,9 @@ def run_digest_dry_run(from_date: str, sources: List[str], out: str, model: str,
         sources: List of source types to process (e.g., ["ews"])
         out: Output directory path
         model: LLM model identifier (not used in dry-run)
+        window: Time window (calendar_day or rolling_24h)
+        state: State directory path override
+        validate_citations: Not used in dry-run mode
     """
     # Generate trace ID for this run
     trace_id = str(uuid.uuid4())
@@ -596,9 +897,15 @@ def run_digest_dry_run(from_date: str, sources: List[str], out: str, model: str,
         # Step 2: Normalize messages
         logger.info("Starting message normalization", stage="normalize")
         normalizer = HTMLNormalizer()
-        quote_cleaner = QuoteCleaner()
+        quote_cleaner = QuoteCleaner(
+            keep_top_quote_head=config.email_cleaner.keep_top_quote_head,
+            config=config.email_cleaner
+        )
         
         normalized_messages = []
+        total_removed_chars = 0
+        total_removed_blocks = 0
+        
         for msg in messages:
             # HTML to text conversion
             text_body = normalizer.html_to_text(msg.text_body)
@@ -606,8 +913,19 @@ def run_digest_dry_run(from_date: str, sources: List[str], out: str, model: str,
             # Truncate large bodies (200KB limit)
             text_body = normalizer.truncate_text(text_body, max_bytes=200000)
             
-            # Clean quotes and signatures
-            cleaned_body = quote_cleaner.clean_quotes(text_body)
+            # Clean quotes and signatures with span tracking (new extractive pipeline)
+            if config.email_cleaner.enabled:
+                cleaned_body, removed_spans = quote_cleaner.clean_email_body(text_body, lang="auto", policy="standard")
+                
+                # Record metrics
+                for span in removed_spans:
+                    span_chars = span.end - span.start
+                    total_removed_chars += span_chars
+                    total_removed_blocks += 1
+                    metrics.record_cleaner_removed_chars(span_chars, span.type)
+                    metrics.record_cleaner_removed_blocks(1, span.type)
+            else:
+                cleaned_body = text_body
             
             # Create normalized message
             normalized_msg = msg._replace(
@@ -616,13 +934,39 @@ def run_digest_dry_run(from_date: str, sources: List[str], out: str, model: str,
             )
             normalized_messages.append(normalized_msg)
         
-        logger.info("Message normalization completed", messages_normalized=len(normalized_messages))
+        logger.info("Message normalization completed", 
+                   messages_normalized=len(normalized_messages),
+                   total_removed_chars=total_removed_chars,
+                   total_removed_blocks=total_removed_blocks)
         
         # Step 3: Build conversation threads
         logger.info("Starting thread building", stage="threads")
+        original_message_count = len(normalized_messages)
         thread_builder = ThreadBuilder()
         threads = thread_builder.build_threads(normalized_messages)
-        logger.info("Thread building completed", threads_created=len(threads))
+        
+        # Record threading metrics
+        thread_stats = thread_builder.get_stats()
+        if thread_stats.get('threads_merged_by_id', 0) > 0:
+            metrics.record_thread_merged('by_id')
+        if thread_stats.get('threads_merged_by_subject', 0) > 0:
+            metrics.record_thread_merged('by_subject')
+        if thread_stats.get('threads_merged_by_semantic', 0) > 0:
+            metrics.record_thread_merged('by_semantic')
+        if thread_stats.get('subjects_normalized', 0) > 0:
+            metrics.record_subject_normalized(thread_stats['subjects_normalized'])
+        if thread_stats.get('duplicates_found', 0) > 0:
+            metrics.record_duplicate_found(thread_stats['duplicates_found'])
+        
+        # Calculate redundancy index
+        unique_message_count = sum(len(t.messages) for t in threads)
+        redundancy = thread_builder.calculate_redundancy_index(original_message_count, unique_message_count)
+        metrics.update_redundancy_index(redundancy)
+        
+        logger.info("Thread building completed",
+                   threads_created=len(threads),
+                   redundancy_reduction=f"{redundancy*100:.1f}%",
+                   **thread_stats)
         
         # Step 4: Split into evidence chunks
         logger.info("Starting evidence splitting", stage="evidence")
@@ -684,4 +1028,4 @@ def run_digest_dry_run(from_date: str, sources: List[str], out: str, model: str,
 
 if __name__ == "__main__":
     # For testing
-    run_digest("today", ["ews"], "./out", "corp/gpt-4o-mini")
+    run_digest("today", ["ews"], "./out", "corp/Qwen/Qwen3-30B-A3B-Instruct-2507")

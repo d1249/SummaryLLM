@@ -17,6 +17,7 @@ def run(
     window: str = typer.Option("calendar_day", "--window", help="Time window: calendar_day or rolling_24h"),
     state: str = typer.Option(None, "--state", help="State directory path (overrides config for SyncState)"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Run ingest+normalize only, skip LLM/assemble"),
+    validate_citations: bool = typer.Option(False, "--validate-citations", help="Enforce citation validation; exit with code 2 on failures"),
     collect_logs: bool = typer.Option(False, "--collect-logs", help="Automatically collect diagnostics after run"),
     log_file: str = typer.Option(None, "--log-file", help="Specify log file path"),
     log_level: str = typer.Option("INFO", "--log-level", help="Log level (DEBUG, INFO, WARNING, ERROR)")
@@ -28,11 +29,17 @@ def run(
         
         if dry_run:
             typer.echo("Dry-run mode: ingest+normalize only")
-            run_digest_dry_run(from_date, sources.split(","), out, model, window, state)
+            run_digest_dry_run(from_date, sources.split(","), out, model, window, state, validate_citations)
             exit_code = 2  # Partial success code
         else:
-            run_digest(from_date, sources.split(","), out, model, window, state)
-            exit_code = 0  # Success
+            citation_validation_passed = run_digest(from_date, sources.split(","), out, model, window, state, validate_citations)
+            
+            # Exit with code 2 if citation validation failed
+            if validate_citations and not citation_validation_passed:
+                typer.echo("⚠ Citation validation failed", err=True)
+                exit_code = 2
+            else:
+                exit_code = 0  # Success
         
         # Collect diagnostics if requested
         if collect_logs:

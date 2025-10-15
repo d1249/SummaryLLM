@@ -146,7 +146,7 @@ def run_digest(from_date: str, sources: List[str], out: str, model: str, window:
         
         for msg in messages:
             # HTML to text conversion
-            text_body = normalizer.html_to_text(msg.text_body)
+            text_body, html_removed_spans = normalizer.html_to_text(msg.text_body)
             
             # Truncate large bodies (200KB limit)
             text_body = normalizer.truncate_text(text_body, max_bytes=200000)
@@ -908,7 +908,7 @@ def run_digest_dry_run(from_date: str, sources: List[str], out: str, model: str,
         
         for msg in messages:
             # HTML to text conversion
-            text_body = normalizer.html_to_text(msg.text_body)
+            text_body, html_removed_spans = normalizer.html_to_text(msg.text_body)
             
             # Truncate large bodies (200KB limit)
             text_body = normalizer.truncate_text(text_body, max_bytes=200000)

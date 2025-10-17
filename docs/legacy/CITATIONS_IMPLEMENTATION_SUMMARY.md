@@ -174,7 +174,7 @@ citation_validation_failures_total
 
 ### 7. Документация (CITATIONS.md)
 
-**Создана полная документация** `digest-core/docs/CITATIONS.md`:
+**Создана полная документация** `docs/development/CITATIONS.md`:
 
 - 📖 Обзор системы
 - 🏗 Архитектура (Citation model, Builder, Validator)
@@ -186,7 +186,7 @@ citation_validation_failures_total
 - 🔍 Troubleshooting common issues
 - 🗺 Roadmap (v1.0, v1.1, v2.0)
 
-**Файл**: `digest-core/docs/CITATIONS.md` (новый, 400+ строк)
+**Файл**: `docs/development/CITATIONS.md` (новый, 400+ строк)
 
 ---
 
@@ -310,7 +310,7 @@ tests/test_citations.py::TestCitationEdgeCases::test_whitespace_differences PASS
    curl http://localhost:9090/metrics | grep citation
    ```
 
-4. **Прочитать документацию**: `digest-core/docs/CITATIONS.md`
+4. **Прочитать документацию**: `docs/development/CITATIONS.md`
 
 ### Возможные улучшения (v1.1):
 - Multi-citation support: один item → несколько писем
@@ -333,7 +333,7 @@ BREAKING CHANGE: run_digest() now returns bool (citation validation status)
 - Add Prometheus metrics: citations_per_item_histogram, citation_validation_failures_total
 - Integrate in pipeline: Step 6.5 enrichment after LLM, before assembly
 - Add 27 comprehensive tests: positive, negative, edge cases (emoji, russian, fuzzy matching)
-- Add documentation: digest-core/docs/CITATIONS.md
+- Add documentation: docs/development/CITATIONS.md
 
 Acceptance (DoD):
 ✅ 100% items with citations field

@@ -16,7 +16,7 @@ NC='\033[0m' # No Color
 
 # Configuration variables
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 DIGEST_CORE_DIR="$PROJECT_ROOT/digest-core"
 TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
 VERBOSE="${VERBOSE:-false}"

@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # SummaryLLM Quick Installer (Non-Interactive)
-# Usage: curl -fsSL https://raw.githubusercontent.com/d1249/SummaryLLM/main/scripts/quick-install.sh | bash
+# Usage: curl -fsSL https://raw.githubusercontent.com/d1249/SummaryLLM/main/digest-core/scripts/quick-install.sh | bash
 
 # Color codes
 GREEN='\033[0;32m'

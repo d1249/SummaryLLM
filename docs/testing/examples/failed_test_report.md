@@ -45,7 +45,7 @@
 
 3. **Permission Denied при записи в /tmp**
    - Ошибка: `PermissionError: [Errno 13] Permission denied: '/tmp/diagnostics'`
-   - Файл: scripts/collect_diagnostics.sh, line 23
+   - Файл: digest-core/scripts/collect_diagnostics.sh, line 23
    - Контекст: При сборе диагностики
    - Workaround: Использовал `export TMPDIR=$HOME/.digest-temp`
    - Статус: Решено через workaround
@@ -295,7 +295,7 @@ time:
 
 ✗ Обнаружены критические ошибки!
 
-Исправьте ошибки, затем запустите снова: ./scripts/doctor.sh
+Исправьте ошибки, затем запустите снова: ./digest-core/scripts/doctor.sh
 ```
 
 ---

@@ -15,13 +15,13 @@
 
 ```bash
 # Полная установка с интерактивной настройкой (рекомендуется)
-curl -fsSL https://raw.githubusercontent.com/d1249/SummaryLLM/main/scripts/install_interactive.sh | bash
+curl -fsSL https://raw.githubusercontent.com/d1249/SummaryLLM/main/digest-core/scripts/install_interactive.sh | bash
 
 # Быстрая установка без интерактивной настройки
-curl -fsSL https://raw.githubusercontent.com/d1249/SummaryLLM/main/scripts/quick-install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/d1249/SummaryLLM/main/digest-core/scripts/quick-install.sh | bash
 
 # С опциями (полная установка)
-curl -fsSL https://raw.githubusercontent.com/d1249/SummaryLLM/main/scripts/install_interactive.sh | bash -s -- --install-dir /opt/summaryllm
+curl -fsSL https://raw.githubusercontent.com/d1249/SummaryLLM/main/digest-core/scripts/install_interactive.sh | bash -s -- --install-dir /opt/summaryllm
 ```
 
 #### macOS (Homebrew) — быстрый старт
@@ -32,7 +32,7 @@ brew update
 brew install python@3.11 uv docker openssl curl git
 
 # Временный PATH для одной команды
-PATH="$(brew --prefix)/opt/python@3.11/bin:$PATH" scripts/install_interactive.sh --auto-brew --add-path
+PATH="$(brew --prefix)/opt/python@3.11/bin:$PATH" digest-core/scripts/install_interactive.sh --auto-brew --add-path
 
 # Явный запуск CLI через 3.11
 cd digest-core
@@ -46,7 +46,7 @@ python3.11 -m digest_core.cli run --dry-run
 
 ```bash
 # Запуск интерактивного мастера настройки
-./setup.sh
+./digest-core/scripts/setup.sh
 
 # Или из директории digest-core
 cd digest-core && make setup-wizard
@@ -80,7 +80,7 @@ cd digest-core && make setup-wizard
    python -m digest_core.cli run
    
    # Автоматический тестовый запуск с диагностикой
-   ./scripts/test_run.sh
+   ./digest-core/scripts/test_run.sh
    ```
 
 **Альтернатива**: Запуск без активации venv:
@@ -109,7 +109,7 @@ pip install --trusted-host pypi.org --trusted-host files.pythonhosted.org -e .
 
 ```bash
 # Запустите скрипт диагностики
-./scripts/fix_installation.sh
+./digest-core/scripts/fix_installation.sh
 
 # Или создайте вручную
 cd digest-core
@@ -128,7 +128,7 @@ pip install -e .
 git pull
 
 # Пересоздайте конфигурацию
-./scripts/setup.sh
+./digest-core/scripts/setup.sh
 ```
 
 ## Основные команды
@@ -157,11 +157,6 @@ make run
 
 ```
 SummaryLLM/
-├── scripts/            # Utility скрипты
-│   ├── install_interactive.sh  # Полная автоматическая установка
-│   ├── quick-install.sh        # Быстрая установка без настройки
-│   ├── setup.sh                # Интерактивная настройка
-│   └── doctor.sh               # Диагностика окружения ⭐
 ├── docs/              # Вся документация
 │   ├── installation/  # Руководства по установке
 │   ├── testing/       # Тестирование ⭐
@@ -169,12 +164,14 @@ SummaryLLM/
 │   ├── operations/    # Развертывание, автоматизация, мониторинг
 │   ├── development/   # Архитектура, технические детали, код
 │   ├── planning/      # Roadmap и планы развития
+│   ├── legacy/        # Архив исторических отчётов и записей
 │   ├── reference/     # Справочная информация
 │   └── troubleshooting/ # Решение проблем
 ├── digest-core/       # Основное приложение
 │   ├── src/          # Исходный код
 │   ├── configs/      # Конфигурационные файлы
-│   ├── scripts/      # Скрипты digest-core (test_run.sh, collect_diagnostics.sh)
+│   ├── scripts/      # Все утилитарные скрипты (установка, тесты, диагностика)
+│   ├── prompts/      # Шаблоны LLM по версиям
 │   ├── out/          # Результаты дайджестов
 │   └── .state/       # Состояние синхронизации
 ├── .gitignore        # Корневой gitignore
@@ -202,7 +199,7 @@ SummaryLLM/
 **Быстрая диагностика окружения:**
 ```bash
 # Проверка готовности системы
-./scripts/doctor.sh
+./digest-core/scripts/doctor.sh
 ```
 
 ### Для разработчиков: Локальное тестирование
@@ -215,12 +212,12 @@ cd digest-core && ./scripts/test_run.sh
 python -m digest_core.cli run --dry-run
 
 # Сбор диагностики вручную
-./scripts/collect_diagnostics.sh
+./digest-core/scripts/collect_diagnostics.sh
 ```
 
 ### Дополнительная документация по тестированию
-- **[📋 Детальный чек-лист](digest-core/docs/testing/MANUAL_TESTING_CHECKLIST.md)** - Подробное тестирование всех компонентов
-- **[📧 Отправка результатов](digest-core/docs/testing/SEND_RESULTS.md)** - Как отправить результаты через корпоративную почту
+- **[📋 Детальный чек-лист](docs/testing/MANUAL_TESTING_CHECKLIST.md)** - Подробное тестирование всех компонентов
+- **[📧 Отправка результатов](docs/testing/SEND_RESULTS.md)** - Как отправить результаты через корпоративную почту
 - **[🔍 Сбор диагностики](digest-core/scripts/collect_diagnostics.sh)** - Автоматический сбор логов и метрик
 
 ## Документация

@@ -183,7 +183,7 @@ wsl --install
 # 2. После установки WSL, работайте в Linux окружении
 wsl
 cd /mnt/c/Users/YourUsername/SummaryLLM
-./scripts/doctor.sh
+./digest-core/scripts/doctor.sh
 ```
 
 #### Решение B: Git Bash
@@ -193,7 +193,7 @@ cd /mnt/c/Users/YourUsername/SummaryLLM
 # Git Bash включен в Git for Windows
 
 # Запуск скриптов через Git Bash
-bash ./scripts/doctor.sh
+bash ./digest-core/scripts/doctor.sh
 ```
 
 ### 6. Антивирус и блокировка файлов
@@ -302,7 +302,7 @@ chmod 600 .env
 
 ### После установки
 
-- [ ] Запустите `./scripts/doctor.sh`
+- [ ] Запустите `./digest-core/scripts/doctor.sh`
 - [ ] Проверьте подключение к EWS (dry-run)
 - [ ] Проверьте все рабочие директории
 - [ ] Убедитесь, что логи создаются

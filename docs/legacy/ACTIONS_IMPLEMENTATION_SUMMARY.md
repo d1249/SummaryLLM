@@ -259,7 +259,7 @@ if use_hierarchical and all_extracted_actions:
 
 ### 6. Документация (ACTIONS_EXTRACTION.md)
 
-**Создана полная документация** `digest-core/docs/ACTIONS_EXTRACTION.md`:
+**Создана полная документация** `docs/development/ACTIONS_EXTRACTION.md`:
 
 **Содержание**:
 - 📖 Обзор системы (types: actions/questions/mentions)
@@ -276,7 +276,7 @@ if use_hierarchical and all_extracted_actions:
 - 🧪 Testing инструкции
 - 🗺 Roadmap (v1.0, v1.1, v2.0)
 
-**Файл**: `digest-core/docs/ACTIONS_EXTRACTION.md` (новый, 600+ строк)
+**Файл**: `docs/development/ACTIONS_EXTRACTION.md` (новый, 600+ строк)
 
 ---
 
@@ -454,7 +454,7 @@ BREAKING CHANGE: EnhancedDigest now includes extracted_actions field
 - Integrate in pipeline: Step 4.5 (extraction) + Step 6.6 (citations enrichment)
 - Add Prometheus metrics: actions_found_total, mentions_found_total, actions_confidence_histogram
 - Add 40+ comprehensive tests with Gold Set (P=0.93, R=0.88, F1=0.90)
-- Add documentation: digest-core/docs/ACTIONS_EXTRACTION.md
+- Add documentation: docs/development/ACTIONS_EXTRACTION.md
 
 Features:
 - Bilingual support: RU + EN out of the box

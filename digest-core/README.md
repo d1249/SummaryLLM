@@ -51,7 +51,7 @@ python -m digest_core.cli run
 
 **The `py.sh` helper script** automatically uses `.venv` if it exists:
 ```bash
-scripts/py.sh -m digest_core.cli run
+digest-core/scripts/py.sh -m digest_core.cli run
 ```
 
 ## Quick Start
@@ -60,7 +60,7 @@ The easiest way to get started is using the interactive setup script from the pr
 
 ```bash
 # From SummaryLLM root directory
-./setup.sh
+./digest-core/scripts/setup.sh
 
 # Or using make
 make setup-wizard
@@ -151,7 +151,7 @@ If the virtual environment wasn't created:
 
 ```bash
 # Run the diagnostic script
-../scripts/fix_installation.sh
+../digest-core/scripts/fix_installation.sh
 
 # Or create manually
 python3.11 -m venv .venv
@@ -170,7 +170,7 @@ cd ..
 git pull
 
 # Recreate configuration
-./scripts/setup.sh
+./digest-core/scripts/setup.sh
 ```
 
 ### Manual Dependency Installation
@@ -450,7 +450,7 @@ For detailed monitoring and observability setup, see **[MONITORING.md](../MONITO
 Quick diagnostics:
 ```bash
 # Run diagnostics
-./scripts/print_env.sh
+./digest-core/scripts/print_env.sh
 
 # Or using make
 make env-check
@@ -463,7 +463,7 @@ For common issues and solutions, see [TROUBLESHOOTING.md](TROUBLESHOOTING.md).
 Quick diagnostics:
 ```bash
 # Check environment and configuration
-./scripts/print_env.sh
+./digest-core/scripts/print_env.sh
 
 # Test dry-run mode
 python3 -m digest_core.cli --dry-run

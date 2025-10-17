@@ -16,7 +16,8 @@ WARN="${YELLOW}⚠${NC}"
 INFO="${BLUE}ℹ${NC}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+DIGEST_CORE_DIR="$PROJECT_ROOT/digest-core"
 
 echo ""
 echo "======================================"
@@ -83,7 +84,7 @@ fi
 # Check 3: Virtual environment
 echo ""
 echo "Проверка виртуального окружения..."
-if [ -d "$PROJECT_ROOT/digest-core/.venv" ]; then
+if [ -d "$DIGEST_CORE_DIR/.venv" ]; then
     print_check "ok" "Виртуальное окружение найдено в digest-core/.venv"
     
     # Check if activated
@@ -95,8 +96,8 @@ if [ -d "$PROJECT_ROOT/digest-core/.venv" ]; then
     fi
     
     # Check if digest_core installed
-    if [ -f "$PROJECT_ROOT/digest-core/.venv/bin/python" ]; then
-        if "$PROJECT_ROOT/digest-core/.venv/bin/python" -c "import digest_core" 2>/dev/null; then
+    if [ -f "$DIGEST_CORE_DIR/.venv/bin/python" ]; then
+        if "$DIGEST_CORE_DIR/.venv/bin/python" -c "import digest_core" 2>/dev/null; then
             print_check "ok" "Пакет digest_core установлен"
         else
             print_check "warn" "Пакет digest_core не установлен"
@@ -143,12 +144,12 @@ check_env_var "STATE_DIR" "optional"
 # Check 5: Configuration file
 echo ""
 echo "Проверка конфигурационного файла..."
-if [ -f "$PROJECT_ROOT/digest-core/configs/config.yaml" ]; then
+if [ -f "$DIGEST_CORE_DIR/configs/config.yaml" ]; then
     print_check "ok" "config.yaml найден"
     
     # Basic YAML validation
     if command -v python3 &> /dev/null; then
-        if python3 -c "import yaml; yaml.safe_load(open('$PROJECT_ROOT/digest-core/configs/config.yaml'))" 2>/dev/null; then
+        if python3 -c "import yaml; yaml.safe_load(open('$DIGEST_CORE_DIR/configs/config.yaml'))" 2>/dev/null; then
             print_check "ok" "config.yaml валиден (YAML синтаксис)"
         else
             print_check "error" "config.yaml имеет ошибки синтаксиса"
@@ -225,9 +226,9 @@ fi
 echo ""
 echo "Проверка SSL сертификатов..."
 
-if [ -f "$PROJECT_ROOT/digest-core/configs/config.yaml" ]; then
+if [ -f "$DIGEST_CORE_DIR/configs/config.yaml" ]; then
     # Extract verify_ca path from config (simple grep)
-    CERT_PATH=$(grep -A 5 "ews:" "$PROJECT_ROOT/digest-core/configs/config.yaml" | grep "verify_ca:" | awk '{print $2}' | tr -d '"' | tr -d "'")
+    CERT_PATH=$(grep -A 5 "ews:" "$DIGEST_CORE_DIR/configs/config.yaml" | grep "verify_ca:" | awk '{print $2}' | tr -d '"' | tr -d "'")
     
     if [ -n "$CERT_PATH" ]; then
         # Expand variables
@@ -262,8 +263,8 @@ fi
 # Check 10: Required Python packages
 echo ""
 echo "Проверка Python зависимостей..."
-if [ -f "$PROJECT_ROOT/digest-core/.venv/bin/python" ]; then
-    VENV_PYTHON="$PROJECT_ROOT/digest-core/.venv/bin/python"
+if [ -f "$DIGEST_CORE_DIR/.venv/bin/python" ]; then
+    VENV_PYTHON="$DIGEST_CORE_DIR/.venv/bin/python"
     
     check_package() {
         local package=$1

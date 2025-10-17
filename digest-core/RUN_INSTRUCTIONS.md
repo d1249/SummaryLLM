@@ -15,7 +15,7 @@
 cd digest-core
 
 # Запустите с автоматической загрузкой конфигурации
-./scripts/run.sh --dry-run
+./digest-core/scripts/run.sh --dry-run
 ```
 
 ### Способ 2: Интерактивная настройка
@@ -25,10 +25,10 @@ cd digest-core
 cd digest-core
 
 # Настройте конфигурацию интерактивно
-source scripts/setup-env.sh
+source digest-core/scripts/setup-env.sh
 
 # Запустите приложение
-./scripts/run.sh --dry-run
+./digest-core/scripts/run.sh --dry-run
 ```
 
 ### Способ 3: Ручная настройка
@@ -45,7 +45,7 @@ export EWS_USER_DOMAIN="raiffeisen.ru"
 export EWS_PASSWORD="ваш_реальный_пароль"
 
 # Загрузите конфигурацию
-source scripts/load-config.sh
+source digest-core/scripts/load-config.sh
 
 # Запустите приложение
 python3 -m src.digest_core.cli run --dry-run
@@ -57,7 +57,7 @@ python3 -m src.digest_core.cli run --dry-run
 
 ```bash
 cd digest-core
-source scripts/setup-env.sh  # Запросит данные интерактивно
+source digest-core/scripts/setup-env.sh  # Запросит данные интерактивно
 python3 -m src.digest_core.cli run --dry-run
 ```
 

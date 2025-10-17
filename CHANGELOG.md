@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Consolidated all utility scripts under `digest-core/scripts/` and refreshed documentation links.
+- Archived historical implementation reports in `docs/legacy/` for easier navigation.
+- Merged `digest-core/docs/` content into the main `docs/` structure.
+- Introduced versioned prompt directories and a registry for template lookups.
+
 ## [1.1.0] - 2024-10-15
 
 ### ⚠️ BREAKING CHANGES

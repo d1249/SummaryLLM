@@ -30,7 +30,7 @@
 - Все команды протестированы
 
 #### 2. doctor.sh скрипт
-**Файл:** `scripts/doctor.sh`  
+**Файл:** `digest-core/scripts/doctor.sh`  
 **Статус:** ✅ Создан и сделан исполняемым
 
 **Что проверяет:**
@@ -67,7 +67,7 @@
 ### Средний приоритет - Завершено
 
 #### 4. Обновление MANUAL_TESTING_CHECKLIST.md
-**Файл:** `digest-core/docs/testing/MANUAL_TESTING_CHECKLIST.md`  
+**Файл:** `docs/testing/MANUAL_TESTING_CHECKLIST.md`  
 **Статус:** ✅ Обновлен
 
 **Добавлено:**
@@ -76,7 +76,7 @@
 - Ссылки на новые документы
 
 #### 5. Обновление SEND_RESULTS.md
-**Файл:** `digest-core/docs/testing/SEND_RESULTS.md`  
+**Файл:** `docs/testing/SEND_RESULTS.md`  
 **Статус:** ✅ Обновлен
 
 **Добавлено:**
@@ -148,14 +148,14 @@
 4. `docs/testing/examples/successful_test_report.md` (~250 строк)
 5. `docs/testing/examples/failed_test_report.md` (~350 строк)
 6. `docs/testing/examples/corporate_laptop_setup.md` (~550 строк)
-7. `scripts/doctor.sh` (~250 строк)
+7. `digest-core/scripts/doctor.sh` (~250 строк)
 
 **Итого:** 7 новых файлов, ~3000 строк документации
 
 ### Обновленные файлы
 1. `README.md` (корневой)
-2. `digest-core/docs/testing/MANUAL_TESTING_CHECKLIST.md`
-3. `digest-core/docs/testing/SEND_RESULTS.md`
+2. `docs/testing/MANUAL_TESTING_CHECKLIST.md`
+3. `docs/testing/SEND_RESULTS.md`
 4. `docs/troubleshooting/TROUBLESHOOTING.md`
 
 **Итого:** 4 обновленных файла
@@ -168,17 +168,17 @@ docs/
     ├── E2E_TESTING_GUIDE.md          ⭐ Основной гайд
     ├── README.md                      📚 Навигация
     ├── DOCUMENTATION_VALIDATION.md    ✅ Валидация
+    ├── MANUAL_TESTING_CHECKLIST.md    🧾 Чек-лист ручного тестирования
+    ├── SEND_RESULTS.md                ✉️ Отправка результатов
     └── examples/
         ├── successful_test_report.md
         ├── failed_test_report.md
         └── corporate_laptop_setup.md
 
-digest-core/docs/testing/
-├── MANUAL_TESTING_CHECKLIST.md       (обновлен)
-└── SEND_RESULTS.md                   (обновлен)
-
-scripts/
-└── doctor.sh                          🔧 Диагностика
+digest-core/scripts/
+├── doctor.sh                          🔧 Диагностика
+├── test_run.sh                        🧪 Автотесты
+└── collect_diagnostics.sh             🗂️ Сбор логов
 ```
 
 ---
@@ -258,15 +258,15 @@ scripts/
 
 ### Для тестировщиков
 - **Начните здесь:** [E2E Testing Guide](./E2E_TESTING_GUIDE.md)
-- **Детальный чек-лист:** [Manual Testing Checklist](../../digest-core/docs/testing/MANUAL_TESTING_CHECKLIST.md)
-- **Отправка результатов:** [Send Results](../../digest-core/docs/testing/SEND_RESULTS.md)
+- **Детальный чек-лист:** [Manual Testing Checklist](../../docs/testing/MANUAL_TESTING_CHECKLIST.md)
+- **Отправка результатов:** [Send Results](../../docs/testing/SEND_RESULTS.md)
 
 ### Для разработчиков
 - **Валидация документации:** [Documentation Validation](./DOCUMENTATION_VALIDATION.md)
 - **Навигация:** [Testing README](./README.md)
 
 ### Инструменты
-- **Диагностика:** `./scripts/doctor.sh`
+- **Диагностика:** `./digest-core/scripts/doctor.sh`
 - **Тестовый запуск:** `digest-core/scripts/test_run.sh`
 - **Сбор диагностики:** `digest-core/scripts/collect_diagnostics.sh`
 

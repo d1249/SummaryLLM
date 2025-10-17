@@ -10,7 +10,7 @@
 
 Перед началом убедитесь, что:
 - [ ] Проект установлен согласно [E2E Testing Guide](../../../docs/testing/E2E_TESTING_GUIDE.md)
-- [ ] Выполнена диагностика: `./scripts/doctor.sh` - все проверки пройдены ✓
+- [ ] Выполнена диагностика: `./digest-core/scripts/doctor.sh` - все проверки пройдены ✓
 - [ ] Переменные окружения настроены (`.env` файл создан и загружен)
 - [ ] Smoke-тест пройден успешно: `python -m digest_core.cli run --dry-run`
 
@@ -26,7 +26,7 @@
 - [ ] Установить `EWS_PASSWORD` (пароль от Exchange)
 - [ ] Установить `EWS_USER_UPN` (email в формате user@corp.com)
 - [ ] Установить `LLM_TOKEN` (токен для LLM Gateway)
-- [ ] Проверить переменные: `./scripts/print_env.sh`
+- [ ] Проверить переменные: `./digest-core/scripts/print_env.sh`
 
 ### 1.3 Проверка доступа к сервисам
 - [ ] Проверить доступ к Exchange серверу
@@ -62,7 +62,7 @@
 ## Этап 3: Интеграционные тесты
 
 ### 3.1 Полный запуск с реальными данными
-- [ ] Запустить: `./scripts/test_run.sh`
+- [ ] Запустить: `./digest-core/scripts/test_run.sh`
 - [ ] Дождаться завершения процесса
 - [ ] Проверить создание файлов дайджеста
 - [ ] Убедиться в отсутствии критических ошибок
@@ -137,7 +137,7 @@
 ## Этап 6: Сбор диагностики
 
 ### 6.1 Автоматический сбор
-- [ ] Запустить `./scripts/collect_diagnostics.sh`
+- [ ] Запустить `./digest-core/scripts/collect_diagnostics.sh`
 - [ ] Дождаться создания архива диагностики
 - [ ] Проверить размер и содержимое архива
 - [ ] Убедиться в наличии всех необходимых файлов
@@ -200,13 +200,13 @@
 
 ```bash
 # Быстрый запуск всех тестов
-./scripts/test_run.sh
+./digest-core/scripts/test_run.sh
 
 # Только диагностика окружения
-./scripts/print_env.sh
+./digest-core/scripts/print_env.sh
 
 # Только сбор диагностики
-./scripts/collect_diagnostics.sh
+./digest-core/scripts/collect_diagnostics.sh
 
 # Проверка метрик
 curl http://localhost:9108/metrics

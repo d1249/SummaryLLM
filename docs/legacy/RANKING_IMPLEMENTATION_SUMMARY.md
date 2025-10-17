@@ -224,7 +224,7 @@ ranker:
 
 ---
 
-### 8. Documentation (`digest-core/docs/RANKING.md`)
+### 8. Documentation (`docs/development/RANKING.md`)
 
 **Разделы:**
 1. Обзор и архитектура
@@ -387,7 +387,7 @@ Acceptance:
 ### Created:
 1. `digest-core/src/digest_core/select/ranker.py` (365 lines)
 2. `digest-core/tests/test_ranker.py` (586 lines)
-3. `digest-core/docs/RANKING.md` (comprehensive guide)
+3. `docs/development/RANKING.md` (comprehensive guide)
 4. `RANKING_IMPLEMENTATION_SUMMARY.md` (this file)
 
 ### Modified:

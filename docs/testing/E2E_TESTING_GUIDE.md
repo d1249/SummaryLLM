@@ -150,12 +150,12 @@ curl -I https://github.com
 
 ```bash
 # Полная установка с интерактивной настройкой
-curl -fsSL https://raw.githubusercontent.com/d1249/SummaryLLM/main/scripts/install_interactive.sh | bash
+curl -fsSL https://raw.githubusercontent.com/d1249/SummaryLLM/main/digest-core/scripts/install_interactive.sh | bash
 
 # Или если репозиторий приватный/локальный, склонируйте вручную:
 git clone https://github.com/d1249/SummaryLLM.git
 cd SummaryLLM
-./scripts/install_interactive.sh
+./digest-core/scripts/install_interactive.sh
 ```
 
 **Что делает скрипт:**
@@ -256,7 +256,7 @@ source .env
 
 ```bash
 cd ~/SummaryLLM
-./scripts/doctor.sh
+./digest-core/scripts/doctor.sh
 ```
 
 **Ожидаемый вывод:**
@@ -335,7 +335,7 @@ tail -50 "$HOME/.digest-logs/run-*.log"
 cd ~/SummaryLLM/digest-core
 
 # Автоматический тестовый запуск с диагностикой
-./scripts/test_run.sh
+./digest-core/scripts/test_run.sh
 ```
 
 **Что происходит:**
@@ -391,7 +391,7 @@ curl http://localhost:9109/healthz 2>/dev/null
 
 ```bash
 cd ~/SummaryLLM/digest-core
-./scripts/collect_diagnostics.sh
+./digest-core/scripts/collect_diagnostics.sh
 ```
 
 **Что собирается:**
@@ -586,7 +586,7 @@ chmod 755 "$OUT_DIR" "$STATE_DIR" "$TMPDIR"
 
 # Запустите снова
 cd ~/SummaryLLM/digest-core
-./scripts/test_run.sh
+./digest-core/scripts/test_run.sh
 ```
 
 ### Проблемы с Python версией
@@ -670,7 +670,7 @@ ews:
 ```bash
 # Исключите большие файлы при сборе
 cd ~/SummaryLLM/digest-core
-./scripts/collect_diagnostics.sh --exclude-large
+./digest-core/scripts/collect_diagnostics.sh --exclude-large
 
 # Или сожмите сильнее
 gzip -9 diagnostics-folder.tar
@@ -690,7 +690,7 @@ A: От 3 до 10 минут в зависимости от количества
 A: Да, все секретные данные автоматически удаляются из архива.
 
 **Q: Что делать, если test_run.sh падает с ошибкой?**
-A: Запустите `./scripts/doctor.sh` для диагностики, затем см. раздел Troubleshooting.
+A: Запустите `./digest-core/scripts/doctor.sh` для диагностики, затем см. раздел Troubleshooting.
 
 **Q: Нужны ли права sudo?**
 A: Нет, вся установка происходит в домашней директории.
@@ -710,8 +710,8 @@ A: Да, через WSL (Windows Subsystem for Linux). Установите WSL,
 
 ## Дополнительные ресурсы
 
-- 📋 [Детальный чек-лист тестирования](../../digest-core/docs/testing/MANUAL_TESTING_CHECKLIST.md)
-- 📧 [Руководство по отправке результатов](../../digest-core/docs/testing/SEND_RESULTS.md)
+- 📋 [Детальный чек-лист тестирования](../../docs/testing/MANUAL_TESTING_CHECKLIST.md)
+- 📧 [Руководство по отправке результатов](../../docs/testing/SEND_RESULTS.md)
 - 🔧 [Подробное руководство по установке](../installation/INSTALL.md)
 - 🚨 [Полное руководство по troubleshooting](../troubleshooting/TROUBLESHOOTING.md)
 - 📚 [Полная документация проекта](../README.md)

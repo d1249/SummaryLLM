@@ -315,7 +315,7 @@ hierarchical:
 
 ### 9. Documentation
 
-**HIERARCHICAL_ORCHESTRATION.md** (`digest-core/docs/HIERARCHICAL_ORCHESTRATION.md`):
+**HIERARCHICAL_ORCHESTRATION.md** (`docs/development/HIERARCHICAL_ORCHESTRATION.md`):
 
 **Разделы:**
 1. Обзор и архитектура
@@ -495,7 +495,7 @@ avg_subsummary_chunks
 
 ### Created:
 1. `digest-core/tests/test_hierarchical_orchestration.py` (450+ lines)
-2. `digest-core/docs/HIERARCHICAL_ORCHESTRATION.md` (comprehensive guide)
+2. `docs/development/HIERARCHICAL_ORCHESTRATION.md` (comprehensive guide)
 3. `HIERARCHICAL_ORCHESTRATION_SUMMARY.md` (this file)
 
 ### Modified:

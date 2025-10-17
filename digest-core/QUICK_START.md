@@ -12,7 +12,7 @@
 
 ```bash
 cd digest-core
-source scripts/setup-env.sh
+source digest-core/scripts/setup-env.sh
 ```
 
 Скрипт запросит:
@@ -23,7 +23,7 @@ source scripts/setup-env.sh
 ### 2. Проверка конфигурации
 
 ```bash
-./scripts/test-connection.sh
+./digest-core/scripts/test-connection.sh
 ```
 
 ### 3. Запуск приложения

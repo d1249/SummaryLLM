@@ -48,9 +48,14 @@ htmlcov/
 .tox/
 
 # Project specific
+out/*
+**/.state/*
+**/logs/*
 digest-core/out/
 digest-core/.state/
 *.backup.*
+!out/.gitkeep
+!*.gitkeep
 
 # Logs
 *.log

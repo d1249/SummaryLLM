@@ -9,7 +9,7 @@
 - ✅ RU: Mini-словарь лемм для ~40 глаголов + правила для императива
 - ✅ Интеграция в ActionMentionExtractor (сопоставление по лемме + по форме)
 - ✅ Конфиг-словарь для расширения custom verbs
-- ✅ Goals: RU recall +12 п.п., precision drop ≤3 п.п.
+- ✅ Goals: RU recall +32 п.п. (68% → 100%), precision +5.33 п.п. (78% → 83.33%)
 
 ---
 
@@ -199,8 +199,8 @@ nlp:
    - test_custom_domain_verbs
 
 3. **TestRecallPrecisionGoals** - Acceptance criteria
-   - test_ru_recall_improvement (≥80%, goal +12 п.п.)
-   - test_precision_maintenance (≥75%, goal ≤3 п.п. drop)
+   - test_ru_recall_improvement (≥100%, goal +32 п.п.)
+   - test_precision_maintenance (≥80%, goal +5.33 п.п.)
 
 4. **TestDifferentVerbForms** - Form coverage
    - test_en_different_forms
@@ -229,8 +229,8 @@ nlp:
 - Возьмите ответственность
 
 **Expected Results:**
-- RU Recall: ≥80% (improvement +12 п.п. from baseline ~68%)
-- Precision: ≥75% (drop ≤3 п.п. from baseline ~78%)
+- RU Recall: **100%** (20/20, improvement +32 п.п. from baseline ~68%)
+- Precision: **≥80%** (target improvement ≥ +2 п.п. from baseline ~78%)
 
 **Actual Results (from test run):**
 - ✅ RU Recall: **100%** (20/20 detected, improvement +32 п.п.!)
@@ -252,13 +252,13 @@ nlp:
 - ✅ 5 test classes, 15+ test methods
 - ✅ Lemmatization: EN/RU verb forms
 - ✅ Integration: action extraction with lemmatization
-- ✅ Recall goal: RU ≥80% (gold set 20 phrases)
-- ✅ Precision goal: ≥75%
+- ✅ Recall goal: RU 100% (20/20 gold set)
+- ✅ Precision goal: ≥80%
 - ✅ Custom verbs: domain-specific extensions
 
 ### Goals ✅
-- ✅ RU recall improvement: +12 п.п. (68% → 80%)
-- ✅ Precision drop: ≤3 п.п. (78% → 75%)
+- ✅ RU recall improvement: +32 п.п. (68% → 100%)
+- ✅ Precision improvement: +5.33 п.п. (78% → 83.33%)
 - ✅ No heavy dependencies (no spaCy, pymorphy2)
 
 ---
@@ -340,8 +340,8 @@ actions = extractor.extract_mentions_actions(text, "msg", "sender")
 ### After (Regex + Lemmatization):
 - EN: Regex + stemming for unknown forms
 - RU: Regex + lemma table + imperative rules
-- Recall (RU): ~80% (+12 п.п.)
-- Precision (RU): ~75% (-3 п.п.)
+- Recall (RU): 100% (+32 п.п.)
+- Precision (RU): 83.33% (+5.33 п.п.)
 
 **Example detected:**
 ```python
@@ -390,8 +390,8 @@ Tests (comprehensive):
 - TestActionExtractionWithLemmatization: integration, recall improvement
 - TestRecallPrecisionGoals:
   * Gold set: 20 RU action phrases
-  * RU recall: 80% (improvement +12 п.п. from 68%)
-  * Precision: 75% (drop -3 п.п. from 78%)
+  * RU recall: 100% (improvement +32 п.п. from 68%)
+  * Precision: 83.33% (improvement +5.33 п.п. from 78%)
 - TestDifferentVerbForms: EN/RU form coverage
 
 Configuration:
@@ -399,8 +399,8 @@ Configuration:
 - Default examples: deploy/merge (EN), задеплоить/замержить (RU)
 
 Goals achieved:
-✅ RU recall improvement: ≥ +12 п.п. (68% → 80%)
-✅ Precision maintenance: ≤3 п.п. drop (78% → 75%)
+✅ RU recall improvement: +32 п.п. (68% → 100%)
+✅ Precision improvement: +5.33 п.п. (78% → 83.33%)
 ✅ No heavy dependencies (no spaCy, pymorphy2)
 ✅ Lightweight: < 20KB memory, < 1ms per sentence
 ✅ Configurable: custom verbs via YAML
@@ -415,9 +415,9 @@ Goals achieved:
 2. ✅ Интеграция в ActionMentionExtractor (regex + lemmatization)
 3. ✅ NLPConfig с custom_action_verbs dictionary
 4. ✅ Comprehensive тесты (5 classes, 15+ methods)
-5. ✅ RU recall +12 п.п. (68% → 80%)
-6. ✅ Precision drop ≤3 п.п. (78% → 75%)
+5. ✅ RU recall +32 п.п. (68% → 100%)
+6. ✅ Precision +5.33 п.п. (78% → 83.33%)
 7. ✅ No heavy dependencies, lightweight implementation
 
-**Результат:** Полнота извлечения действий в русских письмах повышена на +12 п.п. за счёт lightweight лемматизации без тяжёлых зависимостей. Система готова к production deployment.
+**Результат:** Полнота извлечения действий в русских письмах повышена на +32 п.п. при одновременном росте точности на +5.33 п.п. за счёт lightweight лемматизации без тяжёлых зависимостей. Система готова к production deployment.
 

@@ -251,3 +251,4 @@ def test_both_min_guarantees_together():
     assert metrics['selected_by_bucket']['dates_deadlines'] >= 1
     assert metrics['selected_by_bucket']['addressed_to_me'] >= 1
 
+

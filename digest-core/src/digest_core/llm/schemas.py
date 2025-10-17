@@ -198,12 +198,47 @@ class EnhancedDigestV3(BaseModel):
     risks_blockers: List[RiskBlockerV3] = Field(default_factory=list)
     fyi: List[FYIItemV3] = Field(default_factory=list)
 
-    # Markdown summary (generated after JSON)
-    markdown_summary: Optional[str] = None
 
-    # Statistics
-    total_emails_processed: int = Field(default=0)
-    emails_with_actions: int = Field(default=0)
+# Mattermost Action-first schema
+class MattermostEvidenceRef(BaseModel):
+    """Evidence reference used in Mattermost digests."""
+
+    quote: str = Field(description="Minimal quote to support action")
+    permalink: str = Field(description="Mattermost permalink")
+
+
+class MattermostActionLLM(BaseModel):
+    """Action extracted from Mattermost threads via LLM."""
+
+    title: str = Field(description="Short action title")
+    deadline: Optional[str] = Field(
+        default=None, description="ISO timestamp or natural language deadline"
+    )
+    owner: str = Field(description="Who should act, usually 'you'")
+    channel: str = Field(description="Channel name")
+    instruction: Optional[str] = Field(
+        default=None, description="Concrete next step to take"
+    )
+    evidence: List[MattermostEvidenceRef] = Field(
+        default_factory=list, description="Supporting evidence with quote"
+    )
+    urgency: Optional[int] = Field(
+        default=None,
+        ge=0,
+        le=3,
+        description="Optional urgency score 0-3",
+    )
+
+
+class MattermostLLMResponse(BaseModel):
+    """Strict contract for Mattermost action-first LLM output."""
+
+    actions: List[MattermostActionLLM] = Field(default_factory=list)
+    decisions: List[str] = Field(default_factory=list)
+    risks: List[str] = Field(default_factory=list)
+    recap: Optional[str] = Field(
+        default=None, description="Short recap of the thread or topic"
+    )
 
 
 # Hierarchical mode models

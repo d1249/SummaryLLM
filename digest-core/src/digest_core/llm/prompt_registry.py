@@ -15,6 +15,7 @@ PROMPT_TEMPLATE_MAP: Dict[str, str] = {
     "thread_summarize.v1": "thread_summarize/v1/default.j2",
     "extract_actions.v1": "extract_actions/v1/default.j2",
     "extract_actions.en.v1": "extract_actions/v1/en.j2",
+    "mattermost.action_first.v1": "mattermost/action_first/v1/default.j2",
 }
 
 

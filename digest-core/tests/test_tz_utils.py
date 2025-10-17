@@ -175,3 +175,4 @@ def test_timezone_conversion_correctness():
     assert utc_dt2.hour == 7
     assert utc_dt2.tzinfo == timezone.utc
 
+

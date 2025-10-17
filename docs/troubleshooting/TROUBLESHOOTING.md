@@ -211,7 +211,7 @@ export OUT_DIR="$HOME/.digest-out"
 export STATE_DIR="$HOME/.digest-state"
 
 # Or run with custom paths
-./scripts/test_run.sh
+./digest-core/scripts/test_run.sh
 ```
 
 #### Error: "Cannot access /etc/ssl/corp-ca.pem"
@@ -263,7 +263,7 @@ export TMPDIR="$HOME/.digest-temp"
 mkdir -p "$OUT_DIR" "$STATE_DIR" "$TMPDIR"
 
 # Run with home directory paths
-./scripts/test_run.sh
+./digest-core/scripts/test_run.sh
 ```
 
 ### 10. Corporate Laptop Specific Issues
@@ -319,10 +319,10 @@ cd /mnt/c/Users/YourName/SummaryLLM
 
 ```bash
 # Новый comprehensive doctor скрипт
-./scripts/doctor.sh
+./digest-core/scripts/doctor.sh
 
 # Или legacy print_env
-./scripts/print_env.sh
+./digest-core/scripts/print_env.sh
 ```
 
 **Вывод doctor.sh покажет:**
@@ -339,7 +339,7 @@ cd /mnt/c/Users/YourName/SummaryLLM
 ```bash
 # Автоматический сбор всей диагностики
 cd digest-core
-./scripts/collect_diagnostics.sh
+./digest-core/scripts/collect_diagnostics.sh
 
 # Или вручную с verbose logging
 DIGEST_LOG_LEVEL=DEBUG python3 -m digest_core.cli --dry-run 2>&1 | tee debug.log
@@ -350,10 +350,10 @@ cat debug.log | jq .
 
 #### Report issues
 
-**Для E2E тестирования:** Следуйте [E2E Testing Guide](../testing/E2E_TESTING_GUIDE.md) и используйте шаблон из [Send Results](../../digest-core/docs/testing/SEND_RESULTS.md).
+**Для E2E тестирования:** Следуйте [E2E Testing Guide](../testing/E2E_TESTING_GUIDE.md) и используйте шаблон из [Send Results](../../docs/testing/SEND_RESULTS.md).
 
 **Для разработчиков:** Включите в issue:
-1. Output of `./scripts/doctor.sh`
+1. Output of `./digest-core/scripts/doctor.sh`
 2. Архив диагностики (`diagnostics-*.tar.gz`)
 3. Configuration (without secrets)
 4. Error messages and stack traces

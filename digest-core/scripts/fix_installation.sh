@@ -18,7 +18,7 @@ print_warning() { echo -e "${YELLOW}⚠${NC} $1"; }
 print_step() { echo -e "\n${BLUE}=== $1 ===${NC}"; }
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 DIGEST_CORE_DIR="$PROJECT_ROOT/digest-core"
 
 # 1. Проверка версии setup.sh
@@ -145,7 +145,7 @@ check_config() {
     
     if [[ ! -f "$config_file" ]]; then
         print_error "config.yaml не найден"
-        print_info "Запустите: ./scripts/setup.sh"
+        print_info "Запустите: ./digest-core/scripts/setup.sh"
         return 1
     fi
     
@@ -156,7 +156,7 @@ check_config() {
         print_error "config.yaml устаревший (нет user_login)"
         print_warning "Необходимо пересоздать конфигурацию"
         echo "  1. Сделать резервную копию: cp configs/config.yaml configs/config.yaml.old"
-        echo "  2. Запустить setup.sh заново: cd $PROJECT_ROOT && ./scripts/setup.sh"
+        echo "  2. Запустить setup.sh заново: cd $PROJECT_ROOT && ./digest-core/scripts/setup.sh"
         return 1
     fi
     
@@ -185,7 +185,7 @@ check_env() {
     
     if [[ ! -f "$env_file" ]]; then
         print_error ".env не найден"
-        print_info "Запустите: ./scripts/setup.sh"
+        print_info "Запустите: ./digest-core/scripts/setup.sh"
         return 1
     fi
     
@@ -194,7 +194,7 @@ check_env() {
         print_success ".env содержит EWS_LOGIN"
     else
         print_error ".env устаревший (нет EWS_LOGIN)"
-        print_warning "Необходимо пересоздать конфигурацию: ./scripts/setup.sh"
+        print_warning "Необходимо пересоздать конфигурацию: ./digest-core/scripts/setup.sh"
         return 1
     fi
     
@@ -236,7 +236,7 @@ main() {
         echo
         print_info "Рекомендуемые действия:"
         echo "  1. Обновить репозиторий: cd $PROJECT_ROOT && git pull"
-        echo "  2. Запустить setup.sh заново: ./scripts/setup.sh"
+        echo "  2. Запустить setup.sh заново: ./digest-core/scripts/setup.sh"
         echo "  3. При проблемах с сертификатами использовать --trusted-host при pip install"
     fi
 }

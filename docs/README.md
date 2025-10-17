@@ -12,10 +12,10 @@ SummaryLLM - это privacy-first система для автоматическ
 
 ```bash
 # Полная установка с настройкой
-curl -fsSL https://raw.githubusercontent.com/d1249/SummaryLLM/main/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/d1249/SummaryLLM/main/digest-core/scripts/install.sh | bash
 
 # Быстрая установка
-curl -fsSL https://raw.githubusercontent.com/d1249/SummaryLLM/main/scripts/quick-install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/d1249/SummaryLLM/main/digest-core/scripts/quick-install.sh | bash
 ```
 
 ### Первый запуск
@@ -245,7 +245,7 @@ make lint
 cd digest-core && make env-check
 
 # Запустить диагностику
-./scripts/print_env.sh
+./digest-core/scripts/print_env.sh
 
 # Проверить подключения
 python -m digest_core.cli run --dry-run --verbose

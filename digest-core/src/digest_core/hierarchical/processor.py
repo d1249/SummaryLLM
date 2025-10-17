@@ -20,6 +20,7 @@ from digest_core.evidence.split import EvidenceChunk
 from digest_core.llm.schemas import ThreadSummary, EnhancedDigest
 from digest_core.llm.gateway import LLMGateway
 from digest_core.hierarchical.metrics import HierarchicalMetrics
+from digest_core.llm.prompt_registry import get_prompt_template_path
 
 logger = structlog.get_logger()
 
@@ -414,12 +415,16 @@ class HierarchicalProcessor:
         
         # Load prompt
         try:
+            template_rel_path = get_prompt_template_path("thread_summarize.v1")
+        except KeyError as exc:
+            raise ValueError("Unknown thread summary prompt template: thread_summarize.v1") from exc
+        try:
             env = Environment(loader=FileSystemLoader(Path("prompts")))
-            template = env.get_template("thread_summarize.v1.j2")
+            template = env.get_template(template_rel_path)
         except Exception:
             # Try relative to digest-core directory
             env = Environment(loader=FileSystemLoader(Path("digest-core/prompts")))
-            template = env.get_template("thread_summarize.v1.j2")
+            template = env.get_template(template_rel_path)
         
         rendered = template.render(
             thread_id=thread_id,

@@ -24,7 +24,7 @@
 
 ```bash
 cd digest-core
-source scripts/setup-env.sh
+source digest-core/scripts/setup-env.sh
 ```
 
 ### Способ 2: Ручная настройка
@@ -66,7 +66,7 @@ LLM_TOKEN=your_token
 ## Проверка конфигурации
 
 ```bash
-./scripts/test-connection.sh
+./digest-core/scripts/test-connection.sh
 ```
 
 ## Структура конфигурации

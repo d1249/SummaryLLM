@@ -47,6 +47,7 @@ from digest_core.evidence.split import EvidenceChunk
 from digest_core.llm.schemas import Digest, EnhancedDigest, EnhancedDigestV3
 from digest_core.llm.date_utils import get_current_datetime_in_tz
 from digest_core.llm.degrade import extractive_fallback
+from digest_core.llm.prompt_registry import get_prompt_template_path
 from digest_core.observability.metrics import MetricsCollector
 
 logger = structlog.get_logger()
@@ -601,7 +602,13 @@ Signals: action_verbs=[{action_verbs_str}]; dates=[{dates_str}]; contains_questi
         # Load and render prompt
         prompts_dir = Path("prompts")
         env = Environment(loader=FileSystemLoader(prompts_dir))
-        template = env.get_template(f"summarize.{prompt_version}.j2")
+        template_name = f"summarize.{prompt_version}"
+        try:
+            template_path = get_prompt_template_path(template_name)
+        except KeyError as exc:
+            raise ValueError(f"Unknown digest prompt version: {prompt_version}") from exc
+
+        template = env.get_template(template_path)
         
         rendered_prompt = template.render(
             digest_date=digest_date,

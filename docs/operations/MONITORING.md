@@ -220,7 +220,7 @@ groups:
 
 ```bash
 # Run diagnostics
-./scripts/print_env.sh
+./digest-core/scripts/print_env.sh
 
 # Or using make
 make env-check

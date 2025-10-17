@@ -22,7 +22,7 @@
 ### Автоматический запуск (рекомендуется)
 ```bash
 cd digest-core
-./scripts/test_run.sh
+./digest-core/scripts/test_run.sh
 ```
 
 Этот скрипт:
@@ -40,7 +40,7 @@ python3 -m digest_core.cli run --dry-run
 python3 -m digest_core.cli run --out ./out
 
 # 2. Сбор диагностики
-./scripts/collect_diagnostics.sh
+./digest-core/scripts/collect_diagnostics.sh
 ```
 
 ## Шаг 2: Поиск архива диагностики
@@ -327,7 +327,7 @@ cp /tmp/diagnostics-*.tar.gz /media/usb/
 ### Архив слишком большой (>25MB)
 ```bash
 # Создать архив без больших файлов
-./scripts/collect_diagnostics.sh --exclude-large-files
+./digest-core/scripts/collect_diagnostics.sh --exclude-large-files
 ```
 
 ### Проблемы с доступом к почте

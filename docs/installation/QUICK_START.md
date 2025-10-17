@@ -8,10 +8,10 @@
 
 ```bash
 # Полная установка с интерактивной настройкой
-curl -fsSL https://raw.githubusercontent.com/d1249/SummaryLLM/main/scripts/install_interactive.sh | bash
+curl -fsSL https://raw.githubusercontent.com/d1249/SummaryLLM/main/digest-core/scripts/install_interactive.sh | bash
 
 # Быстрая установка без интерактивной настройки
-curl -fsSL https://raw.githubusercontent.com/d1249/SummaryLLM/main/scripts/quick-install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/d1249/SummaryLLM/main/digest-core/scripts/quick-install.sh | bash
 ```
 
 ### Что происходит при установке
@@ -28,7 +28,7 @@ curl -fsSL https://raw.githubusercontent.com/d1249/SummaryLLM/main/scripts/quick
 
 ```bash
 # Запуск интерактивного мастера настройки
-./scripts/setup.sh
+./digest-core/scripts/setup.sh
 
 # Или из директории digest-core
 cd digest-core && make setup-wizard

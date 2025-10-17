@@ -2,8 +2,8 @@
 set -eo pipefail
 
 # SummaryLLM One-Command Installer
-# Usage: curl -fsSL https://raw.githubusercontent.com/d1249/SummaryLLM/main/scripts/install.sh | bash
-# Or: curl -fsSL https://raw.githubusercontent.com/d1249/SummaryLLM/main/scripts/install.sh | bash -s -- --help
+# Usage: curl -fsSL https://raw.githubusercontent.com/d1249/SummaryLLM/main/digest-core/scripts/install_interactive.sh | bash
+# Or: curl -fsSL https://raw.githubusercontent.com/d1249/SummaryLLM/main/digest-core/scripts/install_interactive.sh | bash -s -- --help
 
 # Color codes for output
 RED='\033[0;31m'
@@ -18,6 +18,7 @@ NC='\033[0m' # No Color
 REPO_URL="https://github.com/d1249/SummaryLLM.git"
 DEFAULT_INSTALL_DIR="$HOME/SummaryLLM"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
 
 # Options
@@ -64,7 +65,7 @@ print_step() {
 
 # Check if running from existing repository
 is_existing_repo() {
-    [[ -f "$SCRIPT_DIR/setup.sh" ]] && [[ -d "$SCRIPT_DIR/digest-core" ]]
+    [[ -f "$SCRIPT_DIR/setup.sh" ]] && [[ -d "$REPO_ROOT/digest-core" ]]
 }
 
 # Parse command line arguments
@@ -125,8 +126,8 @@ show_help() {
 SummaryLLM One-Command Installer
 
 USAGE:
-    curl -fsSL https://raw.githubusercontent.com/d1249/SummaryLLM/main/scripts/install.sh | bash
-    curl -fsSL https://raw.githubusercontent.com/d1249/SummaryLLM/main/scripts/install.sh | bash -s -- [OPTIONS]
+    curl -fsSL https://raw.githubusercontent.com/d1249/SummaryLLM/main/digest-core/scripts/install.sh | bash
+    curl -fsSL https://raw.githubusercontent.com/d1249/SummaryLLM/main/digest-core/scripts/install.sh | bash -s -- [OPTIONS]
 
 OPTIONS:
     --install-dir DIR     Installation directory (default: \$HOME/SummaryLLM)
@@ -142,13 +143,13 @@ OPTIONS:
 
 EXAMPLES:
     # Basic installation
-    curl -fsSL https://raw.githubusercontent.com/d1249/SummaryLLM/main/scripts/install.sh | bash
+    curl -fsSL https://raw.githubusercontent.com/d1249/SummaryLLM/main/digest-core/scripts/install.sh | bash
     
     # Install to custom directory
-    curl -fsSL https://raw.githubusercontent.com/d1249/SummaryLLM/main/scripts/install.sh | bash -s -- --install-dir /opt/summaryllm
+    curl -fsSL https://raw.githubusercontent.com/d1249/SummaryLLM/main/digest-core/scripts/install.sh | bash -s -- --install-dir /opt/summaryllm
     
     # Auto-install missing deps via Homebrew and add PATH for python@3.11
-    PATH="\$(brew --prefix)/opt/python@3.11/bin:\$PATH" scripts/install.sh --auto-brew --add-path
+    PATH="\$(brew --prefix)/opt/python@3.11/bin:\$PATH" digest-core/scripts/install.sh --auto-brew --add-path
 
 WHAT THIS SCRIPT DOES:
     1. Clones SummaryLLM repository
@@ -453,16 +454,16 @@ run_setup() {
         return
     fi
     
-    if [[ -f "./scripts/setup.sh" ]]; then
+    if [[ -f "./digest-core/scripts/setup.sh" ]]; then
         print_info "Running interactive setup wizard..."
-        chmod +x ./scripts/setup.sh
+        chmod +x ./digest-core/scripts/setup.sh
         # Change to the cloned directory before running setup
         cd "$INSTALL_DIR"
         # Pass found Python binary to setup.sh and ensure interactive mode
         if [[ -n "$PYTHON_BIN" ]]; then
-            PYTHON_BIN="$PYTHON_BIN" ./scripts/setup.sh < /dev/tty
+            PYTHON_BIN="$PYTHON_BIN" ./digest-core/scripts/setup.sh < /dev/tty
         else
-            ./scripts/setup.sh < /dev/tty
+            ./digest-core/scripts/setup.sh < /dev/tty
         fi
     elif [[ -f "./setup.sh" ]]; then
         print_info "Running interactive setup wizard..."
@@ -561,7 +562,7 @@ main() {
     # Check if running from existing repository
     if is_existing_repo; then
         print_info "Running from existing SummaryLLM repository"
-        INSTALL_DIR="$SCRIPT_DIR"
+        INSTALL_DIR="$REPO_ROOT"
     else
         # Parse arguments
         parse_args "$@"

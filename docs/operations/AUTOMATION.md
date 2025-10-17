@@ -96,7 +96,7 @@ crontab -e
 
 ```bash
 # Rotate state and artifacts
-./scripts/rotate_state.sh
+./digest-core/scripts/rotate_state.sh
 
 # Or using make
 make rotate

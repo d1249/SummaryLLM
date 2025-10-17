@@ -12,10 +12,10 @@
 → Начните с **[E2E Testing Guide](./E2E_TESTING_GUIDE.md)**
 
 **Уже установили и нужен детальный чек-лист?**
-→ См. **[Manual Testing Checklist](../../digest-core/docs/testing/MANUAL_TESTING_CHECKLIST.md)**
+→ См. **[Manual Testing Checklist](../../docs/testing/MANUAL_TESTING_CHECKLIST.md)**
 
 **Готовы отправить результаты?**
-→ См. **[Send Results Guide](../../digest-core/docs/testing/SEND_RESULTS.md)**
+→ См. **[Send Results Guide](../../docs/testing/SEND_RESULTS.md)**
 
 ### Для разработчиков
 
@@ -45,7 +45,7 @@
 
 ---
 
-#### [Manual Testing Checklist](../../digest-core/docs/testing/MANUAL_TESTING_CHECKLIST.md)
+#### [Manual Testing Checklist](../../docs/testing/MANUAL_TESTING_CHECKLIST.md)
 **Для кого:** Опытные тестировщики, детальное тестирование  
 **Что включает:**
 - Детальный чек-лист по этапам
@@ -57,7 +57,7 @@
 
 ---
 
-#### [Send Results Guide](../../digest-core/docs/testing/SEND_RESULTS.md)
+#### [Send Results Guide](../../docs/testing/SEND_RESULTS.md)
 **Для кого:** Все тестировщики  
 **Что включает:**
 - Чек-лист перед отправкой
@@ -109,11 +109,11 @@
 ```bash
 # 1. Прочитайте E2E Testing Guide
 # 2. Запустите диагностику
-./scripts/doctor.sh
+./digest-core/scripts/doctor.sh
 
 # 3. Следуйте гайду пошагово
 # 4. Соберите результаты
-cd digest-core && ./scripts/collect_diagnostics.sh
+cd digest-core && ./digest-core/scripts/collect_diagnostics.sh
 
 # 5. Отправьте отчет (см. Send Results Guide)
 ```
@@ -122,7 +122,7 @@ cd digest-core && ./scripts/collect_diagnostics.sh
 
 ```bash
 # 1. Убедитесь, что система настроена
-./scripts/doctor.sh
+./digest-core/scripts/doctor.sh
 
 # 2. Следуйте Manual Testing Checklist
 # 3. Отмечайте выполненные пункты
@@ -144,23 +144,23 @@ cd digest-core && ./scripts/collect_diagnostics.sh
 
 ### Скрипты для тестирования
 
-**`scripts/doctor.sh`** - Комплексная диагностика окружения
+**`digest-core/scripts/doctor.sh`** - Комплексная диагностика окружения
 ```bash
-./scripts/doctor.sh
+./digest-core/scripts/doctor.sh
 # Проверяет: Python, Git, venv, env vars, config, directories, network
 ```
 
 **`digest-core/scripts/test_run.sh`** - Автоматический тестовый запуск
 ```bash
 cd digest-core
-./scripts/test_run.sh
+./digest-core/scripts/test_run.sh
 # Запускает полный цикл + автоматический сбор диагностики
 ```
 
 **`digest-core/scripts/collect_diagnostics.sh`** - Сбор диагностики
 ```bash
 cd digest-core
-./scripts/collect_diagnostics.sh
+./digest-core/scripts/collect_diagnostics.sh
 # Создает архив: logs, metrics, config, system info
 ```
 
@@ -205,7 +205,7 @@ cd digest-core
 → См. [Global Troubleshooting Guide](../troubleshooting/TROUBLESHOOTING.md)
 
 ### Диагностика
-→ Запустите `./scripts/doctor.sh`
+→ Запустите `./digest-core/scripts/doctor.sh`
 
 ---
 

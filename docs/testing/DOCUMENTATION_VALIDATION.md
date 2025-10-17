@@ -38,7 +38,7 @@
 
 **Тест:**
 ```bash
-./scripts/doctor.sh
+./digest-core/scripts/doctor.sh
 echo "Exit code: $?"
 # Проверьте различные сценарии (без venv, без env vars, и т.д.)
 ```
@@ -85,7 +85,7 @@ done
 **Тест:**
 ```bash
 # Создайте тестовый архив диагностики
-./scripts/collect_diagnostics.sh
+./digest-core/scripts/collect_diagnostics.sh
 # Следуйте инструкциям по проверке
 # Убедитесь, что секреты удалены
 ```

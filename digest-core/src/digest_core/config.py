@@ -73,6 +73,155 @@ class EWSConfig(BaseModel):
         raise ValueError("Cannot determine NTLM username: user_login and user_domain not set, and user_upn is invalid")
 
 
+class MattermostChannelFilterConfig(BaseModel):
+    """Channel include/exclude filters for Mattermost ingest."""
+
+    include: List[str] = Field(
+        default_factory=list,
+        description="Explicit list of channels to include (names or ids)",
+    )
+    exclude: List[str] = Field(
+        default_factory=list,
+        description="Channels to exclude even if included explicitly",
+    )
+
+
+class MattermostSearchConfig(BaseModel):
+    """Configuration for periodic public search mentions."""
+
+    enabled: bool = Field(default=True, description="Enable public search mentions")
+    interval_minutes: int = Field(
+        default=120,
+        description="Interval between public search requests",
+    )
+    min_hits_per_day: int = Field(
+        default=2,
+        description="Minimum matches per day to keep channel in watchlist",
+    )
+
+
+class MattermostRetentionConfig(BaseModel):
+    """Retention configuration for Mattermost raw data and artifacts."""
+
+    raw_days: int = Field(default=7, description="Retention for raw posts in days")
+    artifacts_days: int = Field(
+        default=30,
+        description="Retention for assembled artifacts (markdown/json) in days",
+    )
+
+
+class MattermostScoringWeights(BaseModel):
+    """Feature weights for Mattermost thread scoring."""
+
+    mention: float = Field(default=1.0, description="Weight for direct mentions")
+    dm: float = Field(default=1.2, description="Weight for direct messages")
+    private_channel: float = Field(
+        default=0.4, description="Weight for private channels"
+    )
+    deadline: float = Field(default=1.0, description="Weight for detected deadlines")
+    action: float = Field(default=0.8, description="Weight for action verbs")
+    engagement: float = Field(default=0.3, description="Weight for engagement signals")
+    recency: float = Field(default=1.0, description="Weight for recency decay")
+
+
+class MattermostHierarchyThresholds(BaseModel):
+    """Thresholds for enabling hierarchical summarisation."""
+
+    threads: int = Field(default=40, description="Thread count threshold")
+    posts: int = Field(default=250, description="Post count threshold")
+
+
+class MattermostDeliveryConfig(BaseModel):
+    """Delivery configuration for Mattermost digests."""
+
+    channel: str = Field(
+        default="dm:@me",
+        description="Delivery destination (dm:@user or channel name)",
+    )
+    split_threshold: int = Field(
+        default=3800,
+        description="Message length threshold to trigger multi-part delivery",
+    )
+    idempotent_prefix: str = Field(
+        default="digest",
+        description="Prefix for idempotent delivery keys",
+    )
+
+
+class MattermostConfig(BaseModel):
+    """Mattermost integration configuration."""
+
+    enabled: bool = Field(default=False, description="Enable Mattermost ingest")
+    base_url: str = Field(default="", description="Mattermost base URL")
+    token_env: str = Field(
+        default="MM_TOKEN", description="Environment variable with access token"
+    )
+    teams: List[str] = Field(
+        default_factory=list, description="Teams to ingest (by id or name)"
+    )
+    lookback_hours: int = Field(
+        default=48, description="Default lookback window when no HWM is present"
+    )
+    max_posts_per_channel: int = Field(
+        default=500, description="Safety limit for posts per channel per run"
+    )
+    state_path: str = Field(
+        default=".state/mm_state.json",
+        description="Path to persisted high-water marks",
+    )
+    neg_channels: List[str] = Field(
+        default_factory=list, description="Channels excluded by default"
+    )
+    aliases: List[str] = Field(
+        default_factory=list,
+        description="List of user aliases for mention detection",
+    )
+    privacy_quote_limit: int = Field(
+        default=200, description="Quote character limit for private sources"
+    )
+    dm_requires_consent: bool = Field(
+        default=True, description="Process DM only if consent is present"
+    )
+    consent_store_path: str = Field(
+        default=".state/mm_consent.json",
+        description="Path to DM consent registry cache",
+    )
+    search: MattermostSearchConfig = Field(
+        default_factory=MattermostSearchConfig,
+        description="Public search configuration",
+    )
+    retention: MattermostRetentionConfig = Field(
+        default_factory=MattermostRetentionConfig,
+        description="Retention policies",
+    )
+    scoring: MattermostScoringWeights = Field(
+        default_factory=MattermostScoringWeights,
+        description="Scoring weights for ranking",
+    )
+    hierarchy_thresholds: MattermostHierarchyThresholds = Field(
+        default_factory=MattermostHierarchyThresholds,
+        description="Hierarchical summarisation thresholds",
+    )
+    delivery: MattermostDeliveryConfig = Field(
+        default_factory=MattermostDeliveryConfig,
+        description="Delivery configuration",
+    )
+    channels: MattermostChannelFilterConfig = Field(
+        default_factory=MattermostChannelFilterConfig,
+        description="Channel include/exclude filters",
+    )
+
+    def get_token(self) -> str:
+        """Fetch Mattermost access token from environment."""
+
+        token = os.getenv(self.token_env)
+        if not token:
+            raise ValueError(
+                f"Environment variable {self.token_env} not set for Mattermost token"
+            )
+        return token
+
+
 class LLMConfig(BaseModel):
     """LLM Gateway configuration."""
     endpoint: str = Field(default="", description="LLM Gateway endpoint")
@@ -280,6 +429,7 @@ class Config(BaseSettings):
     # Sub-configurations
     time: TimeConfig = Field(default_factory=TimeConfig)
     ews: EWSConfig = Field(default_factory=EWSConfig)
+    mattermost: MattermostConfig = Field(default_factory=MattermostConfig)
     llm: LLMConfig = Field(default_factory=LLMConfig)
     observability: ObservabilityConfig = Field(default_factory=ObservabilityConfig)
     selection_buckets: SelectionBucketsConfig = Field(default_factory=SelectionBucketsConfig)
